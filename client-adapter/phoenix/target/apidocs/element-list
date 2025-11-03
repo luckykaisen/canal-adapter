@@ -1,0 +1,5 @@
+com.alibaba.otter.canal.client.adapter.phoenix
+com.alibaba.otter.canal.client.adapter.phoenix.config
+com.alibaba.otter.canal.client.adapter.phoenix.monitor
+com.alibaba.otter.canal.client.adapter.phoenix.service
+com.alibaba.otter.canal.client.adapter.phoenix.support

@@ -1,0 +1,4 @@
+com.alibaba.otter.canal.client.adapter.es6x
+com.alibaba.otter.canal.client.adapter.es6x.etl
+com.alibaba.otter.canal.client.adapter.es6x.support
+org.elasticsearch.client

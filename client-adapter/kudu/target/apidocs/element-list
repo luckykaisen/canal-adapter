@@ -1,0 +1,5 @@
+com.alibaba.otter.canal.client.adapter.kudu
+com.alibaba.otter.canal.client.adapter.kudu.config
+com.alibaba.otter.canal.client.adapter.kudu.monitor
+com.alibaba.otter.canal.client.adapter.kudu.service
+com.alibaba.otter.canal.client.adapter.kudu.support

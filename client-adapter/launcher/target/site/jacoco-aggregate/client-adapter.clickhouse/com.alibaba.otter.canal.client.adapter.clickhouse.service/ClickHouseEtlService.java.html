@@ -1,0 +1,198 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>ClickHouseEtlService.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">canal client adapter launcher module for otter 1.1.8</a> &gt; <a href="../index.html" class="el_bundle">client-adapter.clickhouse</a> &gt; <a href="index.source.html" class="el_package">com.alibaba.otter.canal.client.adapter.clickhouse.service</a> &gt; <span class="el_source">ClickHouseEtlService.java</span></div><h1>ClickHouseEtlService.java</h1><pre class="source lang-java linenums">package com.alibaba.otter.canal.client.adapter.clickhouse.service;
+
+import java.sql.*;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
+
+import javax.sql.DataSource;
+
+import com.alibaba.druid.pool.DruidDataSource;
+import com.alibaba.otter.canal.client.adapter.clickhouse.config.MappingConfig;
+import com.alibaba.otter.canal.client.adapter.clickhouse.config.MappingConfig.DbMapping;
+import com.alibaba.otter.canal.client.adapter.clickhouse.support.SyncUtil;
+import com.alibaba.otter.canal.client.adapter.support.*;
+
+/**
+ * ClickHouse ETL 操作业务类
+ *
+ * @author: Xander
+ * @date: Created in 2023/11/10 22:23
+ * @email: zhrunxin33@gmail.com
+ * @version 1.1.8
+ */
+public class ClickHouseEtlService extends AbstractEtlService {
+
+    private DataSource    targetDS;
+    private MappingConfig config;
+
+    public ClickHouseEtlService(DataSource targetDS, MappingConfig config){
+<span class="nc" id="L32">        super(&quot;CLICKHOUSE&quot;, config);</span>
+<span class="nc" id="L33">        this.targetDS = targetDS;</span>
+<span class="nc" id="L34">        this.config = config;</span>
+<span class="nc" id="L35">    }</span>
+
+    /**
+     * 导入数据
+     */
+    public EtlResult importData(List&lt;String&gt; params) {
+<span class="nc" id="L41">        DbMapping dbMapping = config.getDbMapping();</span>
+<span class="nc" id="L42">        DruidDataSource dataSource = DatasourceConfig.DATA_SOURCES.get(config.getDataSourceKey());</span>
+<span class="nc" id="L43">        String sql = &quot;SELECT * FROM &quot; + SyncUtil.getSourceDbTableName(dbMapping, dataSource.getDbType());</span>
+<span class="nc" id="L44">        return importData(sql, params);</span>
+    }
+
+    /**
+     * 执行导入
+     */
+    protected boolean executeSqlImport(DataSource srcDS, String sql, List&lt;Object&gt; values,
+                                       AdapterConfig.AdapterMapping mapping, AtomicLong impCount, List&lt;String&gt; errMsg) {
+        try {
+<span class="nc" id="L53">            DbMapping dbMapping = (DbMapping) mapping;</span>
+<span class="nc" id="L54">            Map&lt;String, String&gt; columnsMap = new LinkedHashMap&lt;&gt;();</span>
+<span class="nc" id="L55">            Map&lt;String, Integer&gt; columnType = new LinkedHashMap&lt;&gt;();</span>
+<span class="nc" id="L56">            DruidDataSource dataSource = (DruidDataSource) srcDS;</span>
+<span class="nc" id="L57">            String backtick = SyncUtil.getBacktickByDbType(dataSource.getDbType());</span>
+
+<span class="nc" id="L59">            Util.sqlRS(targetDS,</span>
+<span class="nc" id="L60">                &quot;SELECT * FROM &quot; + SyncUtil.getDbTableName(dbMapping, dataSource.getDbType()) + &quot; LIMIT 1 &quot;,</span>
+                rs -&gt; {
+                    try {
+
+<span class="nc" id="L64">                        ResultSetMetaData rsd = rs.getMetaData();</span>
+<span class="nc" id="L65">                        int columnCount = rsd.getColumnCount();</span>
+<span class="nc" id="L66">                        List&lt;String&gt; columns = new ArrayList&lt;&gt;();</span>
+<span class="nc bnc" id="L67" title="All 2 branches missed.">                        for (int i = 1; i &lt;= columnCount; i++) {</span>
+<span class="nc" id="L68">                            columnType.put(rsd.getColumnName(i).toLowerCase(), rsd.getColumnType(i));</span>
+<span class="nc" id="L69">                            columns.add(rsd.getColumnName(i));</span>
+                        }
+
+<span class="nc" id="L72">                        columnsMap.putAll(SyncUtil.getColumnsMap(dbMapping, columns));</span>
+<span class="nc" id="L73">                        return true;</span>
+<span class="nc" id="L74">                    } catch (Exception e) {</span>
+<span class="nc" id="L75">                        logger.error(e.getMessage(), e);</span>
+<span class="nc" id="L76">                        return false;</span>
+                    }
+                });
+
+<span class="nc" id="L80">            Util.sqlRS(srcDS, sql, values, rs -&gt; {</span>
+<span class="nc" id="L81">                int idx = 1;</span>
+
+                try {
+<span class="nc" id="L84">                    boolean completed = false;</span>
+
+<span class="nc" id="L86">                    StringBuilder insertSql = new StringBuilder();</span>
+<span class="nc" id="L87">                    insertSql.append(&quot;INSERT INTO &quot;)</span>
+<span class="nc" id="L88">                        .append(SyncUtil.getDbTableName(dbMapping, dataSource.getDbType()))</span>
+<span class="nc" id="L89">                        .append(&quot; (&quot;);</span>
+<span class="nc" id="L90">                    columnsMap.forEach((targetColumnName, srcColumnName) -&gt; insertSql.append(backtick)</span>
+<span class="nc" id="L91">                        .append(targetColumnName)</span>
+<span class="nc" id="L92">                        .append(backtick)</span>
+<span class="nc" id="L93">                        .append(&quot;,&quot;));</span>
+
+<span class="nc" id="L95">                    int len = insertSql.length();</span>
+<span class="nc" id="L96">                    insertSql.delete(len - 1, len).append(&quot;) VALUES (&quot;);</span>
+<span class="nc" id="L97">                    int mapLen = columnsMap.size();</span>
+<span class="nc bnc" id="L98" title="All 2 branches missed.">                    for (int i = 0; i &lt; mapLen; i++) {</span>
+<span class="nc" id="L99">                        insertSql.append(&quot;?,&quot;);</span>
+                    }
+<span class="nc" id="L101">                    len = insertSql.length();</span>
+<span class="nc" id="L102">                    insertSql.delete(len - 1, len).append(&quot;)&quot;);</span>
+<span class="nc" id="L103">                    logger.info(&quot;executeSqlImport sql:{}&quot;, insertSql.toString());</span>
+<span class="nc" id="L104">                    try (Connection connTarget = targetDS.getConnection();</span>
+<span class="nc" id="L105">                            PreparedStatement pstmt = connTarget.prepareStatement(insertSql.toString())) {</span>
+<span class="nc" id="L106">                        connTarget.setAutoCommit(false);</span>
+
+<span class="nc bnc" id="L108" title="All 2 branches missed.">                        while (rs.next()) {</span>
+<span class="nc" id="L109">                            completed = false;</span>
+
+<span class="nc" id="L111">                            pstmt.clearParameters();</span>
+
+                            // 删除数据
+<span class="nc" id="L114">                            Map&lt;String, Object&gt; pkVal = new LinkedHashMap&lt;&gt;();</span>
+<span class="nc" id="L115">                            StringBuilder deleteSql = new StringBuilder(</span>
+<span class="nc" id="L116">                                &quot;ALTER TABLE &quot; + SyncUtil.getDbTableName(dbMapping, dataSource.getDbType())</span>
+                                                                        + &quot; DELETE WHERE &quot;);
+<span class="nc" id="L118">                            appendCondition(dbMapping, deleteSql, pkVal, rs, backtick);</span>
+<span class="nc" id="L119">                            try (PreparedStatement pstmt2 = connTarget.prepareStatement(deleteSql.toString())) {</span>
+<span class="nc" id="L120">                                int k = 1;</span>
+<span class="nc bnc" id="L121" title="All 2 branches missed.">                                for (Object val : pkVal.values()) {</span>
+<span class="nc" id="L122">                                    pstmt2.setObject(k++, val);</span>
+<span class="nc" id="L123">                                }</span>
+<span class="nc" id="L124">                                pstmt2.execute();</span>
+                            }
+
+<span class="nc" id="L127">                            int i = 1;</span>
+<span class="nc bnc" id="L128" title="All 2 branches missed.">                            for (Map.Entry&lt;String, String&gt; entry : columnsMap.entrySet()) {</span>
+<span class="nc" id="L129">                                String targetColumnName = entry.getKey();</span>
+<span class="nc" id="L130">                                String srcColumnName = entry.getValue();</span>
+<span class="nc bnc" id="L131" title="All 2 branches missed.">                                if (srcColumnName == null) {</span>
+<span class="nc" id="L132">                                    srcColumnName = targetColumnName;</span>
+                                }
+
+<span class="nc" id="L135">                                Integer type = columnType.get(targetColumnName.toLowerCase());</span>
+<span class="nc" id="L136">                                Object value = rs.getObject(srcColumnName);</span>
+<span class="nc bnc" id="L137" title="All 2 branches missed.">                                if (value != null) {</span>
+<span class="nc" id="L138">                                    SyncUtil.setPStmt(type, pstmt, value, i);</span>
+                                } else {
+<span class="nc" id="L140">                                    pstmt.setNull(i, type);</span>
+                                }
+
+<span class="nc" id="L143">                                i++;</span>
+<span class="nc" id="L144">                            }</span>
+
+<span class="nc" id="L146">                            pstmt.execute();</span>
+<span class="nc bnc" id="L147" title="All 2 branches missed.">                            if (logger.isTraceEnabled()) {</span>
+<span class="nc" id="L148">                                logger.trace(&quot;Insert into target table, sql: {}&quot;, insertSql);</span>
+                            }
+
+<span class="nc bnc" id="L151" title="All 2 branches missed.">                            if (idx % dbMapping.getCommitBatch() == 0) {</span>
+<span class="nc" id="L152">                                connTarget.commit();</span>
+<span class="nc" id="L153">                                completed = true;</span>
+                            }
+<span class="nc" id="L155">                            idx++;</span>
+<span class="nc" id="L156">                            impCount.incrementAndGet();</span>
+<span class="nc bnc" id="L157" title="All 2 branches missed.">                            if (logger.isDebugEnabled()) {</span>
+<span class="nc" id="L158">                                logger.debug(&quot;successful import count:&quot; + impCount.get());</span>
+                            }
+<span class="nc" id="L160">                        }</span>
+<span class="nc bnc" id="L161" title="All 2 branches missed.">                        if (!completed) {</span>
+<span class="nc" id="L162">                            connTarget.commit();</span>
+                        }
+                    }
+
+<span class="nc" id="L166">                } catch (Exception e) {</span>
+<span class="nc" id="L167">                    logger.error(dbMapping.getTable() + &quot; etl failed! ==&gt;&quot; + e.getMessage(), e);</span>
+<span class="nc" id="L168">                    errMsg.add(dbMapping.getTable() + &quot; etl failed! ==&gt;&quot; + e.getMessage());</span>
+<span class="nc" id="L169">                }</span>
+<span class="nc" id="L170">                return idx;</span>
+            });
+<span class="nc" id="L172">            return true;</span>
+<span class="nc" id="L173">        } catch (Exception e) {</span>
+<span class="nc" id="L174">            logger.error(e.getMessage(), e);</span>
+<span class="nc" id="L175">            return false;</span>
+        }
+    }
+
+    /**
+     * 拼接目标表主键where条件
+     */
+    private static void appendCondition(DbMapping dbMapping, StringBuilder sql, Map&lt;String, Object&gt; values,
+                                        ResultSet rs, String backtick) throws SQLException {
+        // 拼接主键
+<span class="nc bnc" id="L185" title="All 2 branches missed.">        for (Map.Entry&lt;String, String&gt; entry : dbMapping.getTargetPk().entrySet()) {</span>
+<span class="nc" id="L186">            String targetColumnName = entry.getKey();</span>
+<span class="nc" id="L187">            String srcColumnName = entry.getValue();</span>
+<span class="nc bnc" id="L188" title="All 2 branches missed.">            if (srcColumnName == null) {</span>
+<span class="nc" id="L189">                srcColumnName = targetColumnName;</span>
+            }
+<span class="nc" id="L191">            sql.append(backtick).append(targetColumnName).append(backtick).append(&quot;=? AND &quot;);</span>
+<span class="nc" id="L192">            values.put(targetColumnName, rs.getObject(srcColumnName));</span>
+<span class="nc" id="L193">        }</span>
+<span class="nc" id="L194">        int len = sql.length();</span>
+<span class="nc" id="L195">        sql.delete(len - 4, len);</span>
+<span class="nc" id="L196">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.3.201901230119</span></div></body></html>

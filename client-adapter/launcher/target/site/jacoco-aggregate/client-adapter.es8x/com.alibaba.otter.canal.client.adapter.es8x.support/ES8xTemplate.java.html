@@ -1,0 +1,468 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>ES8xTemplate.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">canal client adapter launcher module for otter 1.1.8</a> &gt; <a href="../index.html" class="el_bundle">client-adapter.es8x</a> &gt; <a href="index.source.html" class="el_package">com.alibaba.otter.canal.client.adapter.es8x.support</a> &gt; <span class="el_source">ES8xTemplate.java</span></div><h1>ES8xTemplate.java</h1><pre class="source lang-java linenums">package com.alibaba.otter.canal.client.adapter.es8x.support;
+
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+
+import javax.sql.DataSource;
+
+import org.apache.commons.lang.StringUtils;
+import org.elasticsearch.action.search.SearchResponse;
+import org.elasticsearch.cluster.metadata.MappingMetadata;
+import org.elasticsearch.index.query.BoolQueryBuilder;
+import org.elasticsearch.index.query.QueryBuilders;
+import org.elasticsearch.search.SearchHit;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.alibaba.otter.canal.client.adapter.es.core.config.ESSyncConfig;
+import com.alibaba.otter.canal.client.adapter.es.core.config.ESSyncConfig.ESMapping;
+import com.alibaba.otter.canal.client.adapter.es.core.config.SchemaItem;
+import com.alibaba.otter.canal.client.adapter.es.core.config.SchemaItem.ColumnItem;
+import com.alibaba.otter.canal.client.adapter.es.core.config.SchemaItem.FieldItem;
+import com.alibaba.otter.canal.client.adapter.es.core.support.ESBulkRequest;
+import com.alibaba.otter.canal.client.adapter.es.core.support.ESBulkRequest.ESBulkResponse;
+import com.alibaba.otter.canal.client.adapter.es.core.support.ESBulkRequest.ESDeleteRequest;
+import com.alibaba.otter.canal.client.adapter.es.core.support.ESBulkRequest.ESIndexRequest;
+import com.alibaba.otter.canal.client.adapter.es.core.support.ESBulkRequest.ESUpdateRequest;
+import com.alibaba.otter.canal.client.adapter.es.core.support.ESSyncUtil;
+import com.alibaba.otter.canal.client.adapter.es.core.support.ESTemplate;
+import com.alibaba.otter.canal.client.adapter.es8x.support.ESConnection.ESSearchRequest;
+import com.alibaba.otter.canal.client.adapter.support.DatasourceConfig;
+import com.alibaba.otter.canal.client.adapter.support.Util;
+
+public class ES8xTemplate implements ESTemplate {
+
+<span class="nc" id="L38">    private static final Logger                               logger         = LoggerFactory</span>
+<span class="nc" id="L39">        .getLogger(ESTemplate.class);</span>
+
+    private static final int                                  MAX_BATCH_SIZE = 1000;
+
+    private ESConnection                                      esConnection;
+
+    private ESBulkRequest                                     esBulkRequest;
+
+    // es 字段类型本地缓存
+<span class="nc" id="L48">    private static ConcurrentMap&lt;String, Map&lt;String, String&gt;&gt; esFieldTypes   = new ConcurrentHashMap&lt;&gt;();</span>
+
+<span class="nc" id="L50">    public ES8xTemplate(ESConnection esConnection){</span>
+<span class="nc" id="L51">        this.esConnection = esConnection;</span>
+<span class="nc" id="L52">        this.esBulkRequest = this.esConnection.new ES8xBulkRequest();</span>
+<span class="nc" id="L53">    }</span>
+
+    public ESBulkRequest getBulk() {
+<span class="nc" id="L56">        return esBulkRequest;</span>
+    }
+
+    public void resetBulkRequestBuilder() {
+<span class="nc" id="L60">        this.esBulkRequest.resetBulk();</span>
+<span class="nc" id="L61">    }</span>
+
+    @Override
+    public void insert(ESMapping mapping, Object pkVal, Map&lt;String, Object&gt; esFieldData) {
+<span class="nc bnc" id="L65" title="All 2 branches missed.">        if (mapping.getId() != null) {</span>
+<span class="nc" id="L66">            String parentVal = (String) esFieldData.remove(&quot;$parent_routing&quot;);</span>
+<span class="nc bnc" id="L67" title="All 2 branches missed.">            if (mapping.isUpsert()) {</span>
+<span class="nc" id="L68">                ESUpdateRequest updateRequest = esConnection.new ES8xUpdateRequest(mapping.getIndex(), pkVal.toString())</span>
+<span class="nc" id="L69">                    .setDoc(esFieldData)</span>
+<span class="nc" id="L70">                    .setDocAsUpsert(true);</span>
+<span class="nc bnc" id="L71" title="All 2 branches missed.">                if (StringUtils.isNotEmpty(parentVal)) {</span>
+<span class="nc" id="L72">                    updateRequest.setRouting(parentVal);</span>
+                }
+<span class="nc" id="L74">                getBulk().add(updateRequest);</span>
+<span class="nc" id="L75">            } else {</span>
+<span class="nc" id="L76">                ESIndexRequest indexRequest = esConnection.new ES8xIndexRequest(mapping.getIndex(), pkVal.toString())</span>
+<span class="nc" id="L77">                    .setSource(esFieldData);</span>
+<span class="nc bnc" id="L78" title="All 2 branches missed.">                if (StringUtils.isNotEmpty(parentVal)) {</span>
+<span class="nc" id="L79">                    indexRequest.setRouting(parentVal);</span>
+                }
+<span class="nc" id="L81">                getBulk().add(indexRequest);</span>
+            }
+<span class="nc" id="L83">            commitBulk();</span>
+<span class="nc" id="L84">        } else {</span>
+<span class="nc" id="L85">            ESSearchRequest esSearchRequest = this.esConnection.new ESSearchRequest(mapping.getIndex())</span>
+<span class="nc" id="L86">                .setQuery(QueryBuilders.termQuery(mapping.getPk(), pkVal))</span>
+<span class="nc" id="L87">                .size(10000);</span>
+<span class="nc" id="L88">            SearchResponse response = esSearchRequest.getResponse();</span>
+
+<span class="nc bnc" id="L90" title="All 2 branches missed.">            for (SearchHit hit : response.getHits()) {</span>
+<span class="nc" id="L91">                ESUpdateRequest esUpdateRequest = this.esConnection.new ES8xUpdateRequest(mapping.getIndex(),</span>
+<span class="nc" id="L92">                    hit.getId()).setDoc(esFieldData);</span>
+<span class="nc" id="L93">                getBulk().add(esUpdateRequest);</span>
+<span class="nc" id="L94">                commitBulk();</span>
+<span class="nc" id="L95">            }</span>
+        }
+<span class="nc" id="L97">    }</span>
+
+    @Override
+    public void update(ESMapping mapping, Object pkVal, Map&lt;String, Object&gt; esFieldData) {
+<span class="nc" id="L101">        Map&lt;String, Object&gt; esFieldDataTmp = new LinkedHashMap&lt;&gt;(esFieldData.size());</span>
+<span class="nc" id="L102">        esFieldData.forEach((k, v) -&gt; esFieldDataTmp.put(Util.cleanColumn(k), v));</span>
+<span class="nc" id="L103">        append4Update(mapping, pkVal, esFieldDataTmp);</span>
+<span class="nc" id="L104">        commitBulk();</span>
+<span class="nc" id="L105">    }</span>
+
+    @Override
+    public void updateByQuery(ESSyncConfig config, Map&lt;String, Object&gt; paramsTmp, Map&lt;String, Object&gt; esFieldData) {
+<span class="nc bnc" id="L109" title="All 2 branches missed.">        if (paramsTmp.isEmpty()) {</span>
+<span class="nc" id="L110">            return;</span>
+        }
+<span class="nc" id="L112">        ESMapping mapping = config.getEsMapping();</span>
+<span class="nc" id="L113">        BoolQueryBuilder queryBuilder = QueryBuilders.boolQuery();</span>
+<span class="nc" id="L114">        paramsTmp.forEach((fieldName, value) -&gt; queryBuilder.must(QueryBuilders.termsQuery(fieldName, value)));</span>
+
+        // 查询sql批量更新
+<span class="nc" id="L117">        DataSource ds = DatasourceConfig.DATA_SOURCES.get(config.getDataSourceKey());</span>
+<span class="nc" id="L118">        StringBuilder sql = new StringBuilder(&quot;SELECT * FROM (&quot; + mapping.getSql() + &quot;) _v WHERE &quot;);</span>
+<span class="nc" id="L119">        List&lt;Object&gt; values = new ArrayList&lt;&gt;();</span>
+<span class="nc" id="L120">        paramsTmp.forEach((fieldName, value) -&gt; {</span>
+<span class="nc" id="L121">            sql.append(&quot;_v.&quot;).append(fieldName).append(&quot;=? AND &quot;);</span>
+<span class="nc" id="L122">            values.add(value);</span>
+<span class="nc" id="L123">        });</span>
+        // TODO 直接外部包裹sql会导致全表扫描性能低, 待优化拼接内部where条件
+<span class="nc" id="L125">        int len = sql.length();</span>
+<span class="nc" id="L126">        sql.delete(len - 4, len);</span>
+<span class="nc" id="L127">        Integer syncCount = (Integer) Util.sqlRS(ds, sql.toString(), values, rs -&gt; {</span>
+<span class="nc" id="L128">            int count = 0;</span>
+            try {
+<span class="nc bnc" id="L130" title="All 2 branches missed.">                while (rs.next()) {</span>
+<span class="nc" id="L131">                    Object idVal = getIdValFromRS(mapping, rs);</span>
+<span class="nc" id="L132">                    append4Update(mapping, idVal, esFieldData);</span>
+<span class="nc" id="L133">                    commitBulk();</span>
+<span class="nc" id="L134">                    count++;</span>
+<span class="nc" id="L135">                }</span>
+<span class="nc" id="L136">            } catch (Exception e) {</span>
+<span class="nc" id="L137">                throw new RuntimeException(e);</span>
+<span class="nc" id="L138">            }</span>
+<span class="nc" id="L139">            return count;</span>
+        });
+<span class="nc bnc" id="L141" title="All 2 branches missed.">        if (logger.isTraceEnabled()) {</span>
+<span class="nc" id="L142">            logger.trace(&quot;Update ES by query affected {} records&quot;, syncCount);</span>
+        }
+<span class="nc" id="L144">    }</span>
+
+    @Override
+    public void delete(ESMapping mapping, Object pkVal, Map&lt;String, Object&gt; esFieldData) {
+<span class="nc bnc" id="L148" title="All 2 branches missed.">        if (mapping.getId() != null) {</span>
+<span class="nc" id="L149">            ESDeleteRequest esDeleteRequest = this.esConnection.new ES8xDeleteRequest(mapping.getIndex(),</span>
+<span class="nc" id="L150">                pkVal.toString());</span>
+<span class="nc" id="L151">            getBulk().add(esDeleteRequest);</span>
+<span class="nc" id="L152">            commitBulk();</span>
+<span class="nc" id="L153">        } else {</span>
+<span class="nc" id="L154">            ESSearchRequest esSearchRequest = this.esConnection.new ESSearchRequest(mapping.getIndex())</span>
+<span class="nc" id="L155">                .setQuery(QueryBuilders.termQuery(mapping.getPk(), pkVal))</span>
+<span class="nc" id="L156">                .size(10000);</span>
+<span class="nc" id="L157">            SearchResponse response = esSearchRequest.getResponse();</span>
+<span class="nc bnc" id="L158" title="All 2 branches missed.">            for (SearchHit hit : response.getHits()) {</span>
+<span class="nc" id="L159">                ESUpdateRequest esUpdateRequest = this.esConnection.new ES8xUpdateRequest(mapping.getIndex(),</span>
+<span class="nc" id="L160">                    hit.getId()).setDoc(esFieldData);</span>
+<span class="nc" id="L161">                getBulk().add(esUpdateRequest);</span>
+<span class="nc" id="L162">                commitBulk();</span>
+<span class="nc" id="L163">            }</span>
+        }
+<span class="nc" id="L165">    }</span>
+
+    @Override
+    public void commit() {
+<span class="nc bnc" id="L169" title="All 2 branches missed.">        if (getBulk().numberOfActions() &gt; 0) {</span>
+<span class="nc" id="L170">            ESBulkResponse response = getBulk().bulk();</span>
+<span class="nc bnc" id="L171" title="All 2 branches missed.">            if (response.hasFailures()) {</span>
+<span class="nc" id="L172">                response.processFailBulkResponse(&quot;ES sync commit error &quot;);</span>
+            }
+<span class="nc" id="L174">            resetBulkRequestBuilder();</span>
+        }
+<span class="nc" id="L176">    }</span>
+
+    @Override
+    public Object getValFromRS(ESMapping mapping, ResultSet resultSet, String fieldName,
+                               String columnName) throws SQLException {
+<span class="nc" id="L181">        fieldName = Util.cleanColumn(fieldName);</span>
+<span class="nc" id="L182">        columnName = Util.cleanColumn(columnName);</span>
+<span class="nc" id="L183">        String esType = getEsType(mapping, fieldName);</span>
+
+<span class="nc" id="L185">        Object value = resultSet.getObject(columnName);</span>
+<span class="nc bnc" id="L186" title="All 2 branches missed.">        if (value instanceof Boolean) {</span>
+<span class="nc bnc" id="L187" title="All 2 branches missed.">            if (!&quot;boolean&quot;.equals(esType)) {</span>
+<span class="nc" id="L188">                value = resultSet.getByte(columnName);</span>
+            }
+        }
+
+        // 如果是对象类型
+<span class="nc bnc" id="L193" title="All 2 branches missed.">        if (mapping.getObjFields().containsKey(fieldName)) {</span>
+<span class="nc" id="L194">            return ESSyncUtil.convertToEsObj(value, mapping.getObjFields().get(fieldName));</span>
+        } else {
+<span class="nc" id="L196">            return ESSyncUtil.typeConvert(value, esType);</span>
+        }
+    }
+
+    @Override
+    public Object getESDataFromRS(ESMapping mapping, ResultSet resultSet,
+                                  Map&lt;String, Object&gt; esFieldData) throws SQLException {
+<span class="nc" id="L203">        SchemaItem schemaItem = mapping.getSchemaItem();</span>
+<span class="nc bnc" id="L204" title="All 2 branches missed.">        String idFieldName = mapping.getId() == null ? mapping.getPk() : mapping.getId();</span>
+<span class="nc" id="L205">        Object resultIdVal = null;</span>
+<span class="nc bnc" id="L206" title="All 2 branches missed.">        for (FieldItem fieldItem : schemaItem.getSelectFields().values()) {</span>
+<span class="nc" id="L207">            Object value = getValFromRS(mapping, resultSet, fieldItem.getFieldName(), fieldItem.getFieldName());</span>
+
+<span class="nc bnc" id="L209" title="All 2 branches missed.">            if (fieldItem.getFieldName().equals(idFieldName)) {</span>
+<span class="nc" id="L210">                resultIdVal = value;</span>
+            }
+
+<span class="nc bnc" id="L213" title="All 2 branches missed.">            if (!fieldItem.getFieldName().equals(mapping.getId())</span>
+<span class="nc bnc" id="L214" title="All 2 branches missed.">                &amp;&amp; !mapping.getSkips().contains(fieldItem.getFieldName())) {</span>
+<span class="nc" id="L215">                esFieldData.put(Util.cleanColumn(fieldItem.getFieldName()), value);</span>
+            }
+<span class="nc" id="L217">        }</span>
+
+        // 添加父子文档关联信息
+<span class="nc" id="L220">        putRelationDataFromRS(mapping, schemaItem, resultSet, esFieldData);</span>
+
+<span class="nc" id="L222">        return resultIdVal;</span>
+    }
+
+    @Override
+    public Object getIdValFromRS(ESMapping mapping, ResultSet resultSet) throws SQLException {
+<span class="nc" id="L227">        SchemaItem schemaItem = mapping.getSchemaItem();</span>
+<span class="nc bnc" id="L228" title="All 2 branches missed.">        String idFieldName = mapping.getId() == null ? mapping.getPk() : mapping.getId();</span>
+<span class="nc" id="L229">        Object resultIdVal = null;</span>
+<span class="nc bnc" id="L230" title="All 2 branches missed.">        for (FieldItem fieldItem : schemaItem.getSelectFields().values()) {</span>
+<span class="nc" id="L231">            Object value = getValFromRS(mapping, resultSet, fieldItem.getFieldName(), fieldItem.getFieldName());</span>
+
+<span class="nc bnc" id="L233" title="All 2 branches missed.">            if (fieldItem.getFieldName().equals(idFieldName)) {</span>
+<span class="nc" id="L234">                resultIdVal = value;</span>
+<span class="nc" id="L235">                break;</span>
+            }
+<span class="nc" id="L237">        }</span>
+<span class="nc" id="L238">        return resultIdVal;</span>
+    }
+
+    @Override
+    public Object getESDataFromRS(ESMapping mapping, ResultSet resultSet, Map&lt;String, Object&gt; dmlOld,
+                                  Map&lt;String, Object&gt; esFieldData) throws SQLException {
+<span class="nc" id="L244">        SchemaItem schemaItem = mapping.getSchemaItem();</span>
+<span class="nc bnc" id="L245" title="All 2 branches missed.">        String idFieldName = mapping.getId() == null ? mapping.getPk() : mapping.getId();</span>
+<span class="nc" id="L246">        Object resultIdVal = null;</span>
+<span class="nc bnc" id="L247" title="All 2 branches missed.">        for (FieldItem fieldItem : schemaItem.getSelectFields().values()) {</span>
+<span class="nc bnc" id="L248" title="All 2 branches missed.">            if (fieldItem.getFieldName().equals(idFieldName)) {</span>
+<span class="nc" id="L249">                resultIdVal = getValFromRS(mapping, resultSet, fieldItem.getFieldName(), fieldItem.getFieldName());</span>
+            }
+
+<span class="nc bnc" id="L252" title="All 2 branches missed.">            for (ColumnItem columnItem : fieldItem.getColumnItems()) {</span>
+<span class="nc bnc" id="L253" title="All 2 branches missed.">                if (dmlOld.containsKey(columnItem.getColumnName())</span>
+<span class="nc bnc" id="L254" title="All 2 branches missed.">                    &amp;&amp; !mapping.getSkips().contains(fieldItem.getFieldName())) {</span>
+<span class="nc" id="L255">                    esFieldData.put(Util.cleanColumn(fieldItem.getFieldName()),</span>
+<span class="nc" id="L256">                        getValFromRS(mapping, resultSet, fieldItem.getFieldName(), fieldItem.getFieldName()));</span>
+<span class="nc" id="L257">                    break;</span>
+                }
+<span class="nc" id="L259">            }</span>
+<span class="nc" id="L260">        }</span>
+
+        // 添加父子文档关联信息
+<span class="nc" id="L263">        putRelationDataFromRS(mapping, schemaItem, resultSet, esFieldData);</span>
+
+<span class="nc" id="L265">        return resultIdVal;</span>
+    }
+
+    @Override
+    public Object getValFromData(ESMapping mapping, Map&lt;String, Object&gt; dmlData, String fieldName, String columnName) {
+<span class="nc" id="L270">        String esType = getEsType(mapping, fieldName);</span>
+<span class="nc" id="L271">        Object value = dmlData.get(columnName);</span>
+<span class="nc bnc" id="L272" title="All 2 branches missed.">        if (value instanceof Byte) {</span>
+<span class="nc bnc" id="L273" title="All 2 branches missed.">            if (&quot;boolean&quot;.equals(esType)) {</span>
+<span class="nc bnc" id="L274" title="All 2 branches missed.">                value = ((Byte) value).intValue() != 0;</span>
+            }
+        }
+
+        // 如果是对象类型
+<span class="nc bnc" id="L279" title="All 2 branches missed.">        if (mapping.getObjFields().containsKey(fieldName)) {</span>
+<span class="nc" id="L280">            return ESSyncUtil.convertToEsObj(value, mapping.getObjFields().get(fieldName));</span>
+        } else {
+<span class="nc" id="L282">            return ESSyncUtil.typeConvert(value, esType);</span>
+        }
+    }
+
+    @Override
+    public Object getESDataFromDmlData(ESMapping mapping, Map&lt;String, Object&gt; dmlData,
+                                       Map&lt;String, Object&gt; esFieldData) {
+<span class="nc" id="L289">        SchemaItem schemaItem = mapping.getSchemaItem();</span>
+<span class="nc bnc" id="L290" title="All 2 branches missed.">        String idFieldName = mapping.getId() == null ? mapping.getPk() : mapping.getId();</span>
+<span class="nc" id="L291">        Object resultIdVal = null;</span>
+<span class="nc bnc" id="L292" title="All 2 branches missed.">        for (FieldItem fieldItem : schemaItem.getSelectFields().values()) {</span>
+<span class="nc" id="L293">            String columnName = fieldItem.getColumnItems().iterator().next().getColumnName();</span>
+<span class="nc" id="L294">            Object value = getValFromData(mapping, dmlData, fieldItem.getFieldName(), columnName);</span>
+
+<span class="nc bnc" id="L296" title="All 2 branches missed.">            if (fieldItem.getFieldName().equals(idFieldName)) {</span>
+<span class="nc" id="L297">                resultIdVal = value;</span>
+            }
+
+<span class="nc bnc" id="L300" title="All 2 branches missed.">            if (!fieldItem.getFieldName().equals(mapping.getId())</span>
+<span class="nc bnc" id="L301" title="All 2 branches missed.">                &amp;&amp; !mapping.getSkips().contains(fieldItem.getFieldName())) {</span>
+<span class="nc" id="L302">                esFieldData.put(Util.cleanColumn(fieldItem.getFieldName()), value);</span>
+            }
+<span class="nc" id="L304">        }</span>
+
+        // 添加父子文档关联信息
+<span class="nc" id="L307">        putRelationData(mapping, schemaItem, dmlData, esFieldData);</span>
+<span class="nc" id="L308">        return resultIdVal;</span>
+    }
+
+    @Override
+    public Object getESDataFromDmlData(ESMapping mapping, String owner, Map&lt;String, Object&gt; dmlData,
+                                       Map&lt;String, Object&gt; dmlOld, Map&lt;String, Object&gt; esFieldData) {
+<span class="nc" id="L314">        SchemaItem schemaItem = mapping.getSchemaItem();</span>
+<span class="nc bnc" id="L315" title="All 2 branches missed.">        String idFieldName = mapping.getId() == null ? mapping.getPk() : mapping.getId();</span>
+<span class="nc" id="L316">        Object resultIdVal = null;</span>
+<span class="nc bnc" id="L317" title="All 2 branches missed.">        for (FieldItem fieldItem : schemaItem.getSelectFields().values()) {</span>
+<span class="nc" id="L318">            ColumnItem columnItem = fieldItem.getColumnItems().iterator().next();</span>
+<span class="nc bnc" id="L319" title="All 2 branches missed.">            if (!columnItem.getOwner().equals(owner)) {</span>
+<span class="nc" id="L320">                continue;</span>
+            }
+<span class="nc" id="L322">            String columnName = columnItem.getColumnName();</span>
+
+<span class="nc bnc" id="L324" title="All 2 branches missed.">            if (fieldItem.getFieldName().equals(idFieldName)) {</span>
+<span class="nc" id="L325">                resultIdVal = getValFromData(mapping, dmlData, fieldItem.getFieldName(), columnName);</span>
+            }
+
+<span class="nc bnc" id="L328" title="All 4 branches missed.">            if (dmlOld.containsKey(columnName) &amp;&amp; !mapping.getSkips().contains(fieldItem.getFieldName())) {</span>
+<span class="nc" id="L329">                esFieldData.put(Util.cleanColumn(fieldItem.getFieldName()),</span>
+<span class="nc" id="L330">                    getValFromData(mapping, dmlData, fieldItem.getFieldName(), columnName));</span>
+            }
+<span class="nc" id="L332">        }</span>
+
+        // 添加父子文档关联信息
+<span class="nc" id="L335">        putRelationData(mapping, schemaItem, dmlOld, esFieldData);</span>
+<span class="nc" id="L336">        return resultIdVal;</span>
+    }
+
+    /**
+     * 如果大于批量数则提交批次
+     */
+    private void commitBulk() {
+<span class="nc bnc" id="L343" title="All 2 branches missed.">        if (getBulk().numberOfActions() &gt;= MAX_BATCH_SIZE) {</span>
+<span class="nc" id="L344">            commit();</span>
+        }
+<span class="nc" id="L346">    }</span>
+
+    private void append4Update(ESMapping mapping, Object pkVal, Map&lt;String, Object&gt; esFieldData) {
+<span class="nc bnc" id="L349" title="All 2 branches missed.">        if (mapping.getId() != null) {</span>
+<span class="nc" id="L350">            String parentVal = (String) esFieldData.remove(&quot;$parent_routing&quot;);</span>
+<span class="nc bnc" id="L351" title="All 2 branches missed.">            if (mapping.isUpsert()) {</span>
+<span class="nc" id="L352">                ESUpdateRequest esUpdateRequest = this.esConnection.new ES8xUpdateRequest(mapping.getIndex(),</span>
+<span class="nc" id="L353">                    pkVal.toString()).setDoc(esFieldData).setDocAsUpsert(true);</span>
+<span class="nc bnc" id="L354" title="All 2 branches missed.">                if (StringUtils.isNotEmpty(parentVal)) {</span>
+<span class="nc" id="L355">                    esUpdateRequest.setRouting(parentVal);</span>
+                }
+<span class="nc" id="L357">                getBulk().add(esUpdateRequest);</span>
+<span class="nc" id="L358">            } else {</span>
+<span class="nc" id="L359">                ESUpdateRequest esUpdateRequest = this.esConnection.new ES8xUpdateRequest(mapping.getIndex(),</span>
+<span class="nc" id="L360">                    pkVal.toString()).setDoc(esFieldData);</span>
+<span class="nc bnc" id="L361" title="All 2 branches missed.">                if (StringUtils.isNotEmpty(parentVal)) {</span>
+<span class="nc" id="L362">                    esUpdateRequest.setRouting(parentVal);</span>
+                }
+<span class="nc" id="L364">                getBulk().add(esUpdateRequest);</span>
+            }
+<span class="nc" id="L366">        } else {</span>
+<span class="nc" id="L367">            ESSearchRequest esSearchRequest = this.esConnection.new ESSearchRequest(mapping.getIndex())</span>
+<span class="nc" id="L368">                .setQuery(QueryBuilders.termQuery(mapping.getPk(), pkVal))</span>
+<span class="nc" id="L369">                .size(10000);</span>
+<span class="nc" id="L370">            SearchResponse response = esSearchRequest.getResponse();</span>
+<span class="nc bnc" id="L371" title="All 2 branches missed.">            for (SearchHit hit : response.getHits()) {</span>
+<span class="nc" id="L372">                ESUpdateRequest esUpdateRequest = this.esConnection.new ES8xUpdateRequest(mapping.getIndex(),</span>
+<span class="nc" id="L373">                    hit.getId()).setDoc(esFieldData);</span>
+<span class="nc" id="L374">                getBulk().add(esUpdateRequest);</span>
+<span class="nc" id="L375">            }</span>
+        }
+<span class="nc" id="L377">    }</span>
+
+    /**
+     * 获取es mapping中的属性类型
+     *
+     * @param mapping mapping配置
+     * @param fieldName 属性名
+     * @return 类型
+     */
+    @SuppressWarnings(&quot;unchecked&quot;)
+    private String getEsType(ESMapping mapping, String fieldName) {
+<span class="nc" id="L388">        String key = mapping.getIndex() + &quot;-&quot; + mapping.getType();</span>
+<span class="nc" id="L389">        Map&lt;String, String&gt; fieldType = esFieldTypes.get(key);</span>
+<span class="nc bnc" id="L390" title="All 2 branches missed.">        if (fieldType != null) {</span>
+<span class="nc" id="L391">            return fieldType.get(fieldName);</span>
+        } else {
+<span class="nc" id="L393">            MappingMetadata mappingMetaData = esConnection.getMapping(mapping.getIndex());</span>
+
+<span class="nc bnc" id="L395" title="All 2 branches missed.">            if (mappingMetaData == null) {</span>
+<span class="nc" id="L396">                throw new IllegalArgumentException(&quot;Not found the mapping info of index: &quot; + mapping.getIndex());</span>
+            }
+
+<span class="nc" id="L399">            fieldType = new LinkedHashMap&lt;&gt;();</span>
+
+<span class="nc" id="L401">            Map&lt;String, Object&gt; sourceMap = mappingMetaData.getSourceAsMap();</span>
+<span class="nc" id="L402">            Map&lt;String, Object&gt; esMapping = (Map&lt;String, Object&gt;) sourceMap.get(&quot;properties&quot;);</span>
+<span class="nc bnc" id="L403" title="All 2 branches missed.">            for (Map.Entry&lt;String, Object&gt; entry : esMapping.entrySet()) {</span>
+<span class="nc" id="L404">                Map&lt;String, Object&gt; value = (Map&lt;String, Object&gt;) entry.getValue();</span>
+<span class="nc bnc" id="L405" title="All 2 branches missed.">                if (value.containsKey(&quot;properties&quot;)) {</span>
+<span class="nc" id="L406">                    fieldType.put(entry.getKey(), &quot;object&quot;);</span>
+                } else {
+<span class="nc" id="L408">                    fieldType.put(entry.getKey(), (String) value.get(&quot;type&quot;));</span>
+                }
+<span class="nc" id="L410">            }</span>
+<span class="nc" id="L411">            esFieldTypes.put(key, fieldType);</span>
+
+<span class="nc" id="L413">            return fieldType.get(fieldName);</span>
+        }
+    }
+
+    private void putRelationDataFromRS(ESMapping mapping, SchemaItem schemaItem, ResultSet resultSet,
+                                       Map&lt;String, Object&gt; esFieldData) {
+        // 添加父子文档关联信息
+<span class="nc bnc" id="L420" title="All 2 branches missed.">        if (!mapping.getRelations().isEmpty()) {</span>
+<span class="nc" id="L421">            mapping.getRelations().forEach((relationField, relationMapping) -&gt; {</span>
+<span class="nc" id="L422">                Map&lt;String, Object&gt; relations = new HashMap&lt;&gt;();</span>
+<span class="nc" id="L423">                relations.put(&quot;name&quot;, relationMapping.getName());</span>
+<span class="nc bnc" id="L424" title="All 2 branches missed.">                if (StringUtils.isNotEmpty(relationMapping.getParent())) {</span>
+<span class="nc" id="L425">                    FieldItem parentFieldItem = schemaItem.getSelectFields().get(relationMapping.getParent());</span>
+                    Object parentVal;
+                    try {
+<span class="nc" id="L428">                        parentVal = getValFromRS(mapping,</span>
+                            resultSet,
+<span class="nc" id="L430">                            parentFieldItem.getFieldName(),</span>
+<span class="nc" id="L431">                            parentFieldItem.getFieldName());</span>
+<span class="nc" id="L432">                    } catch (SQLException e) {</span>
+<span class="nc" id="L433">                        throw new RuntimeException(e);</span>
+<span class="nc" id="L434">                    }</span>
+<span class="nc bnc" id="L435" title="All 2 branches missed.">                    if (parentVal != null) {</span>
+<span class="nc" id="L436">                        relations.put(&quot;parent&quot;, parentVal.toString());</span>
+<span class="nc" id="L437">                        esFieldData.put(&quot;$parent_routing&quot;, parentVal.toString());</span>
+
+                    }
+                }
+<span class="nc" id="L441">                esFieldData.put(relationField, relations);</span>
+<span class="nc" id="L442">            });</span>
+        }
+<span class="nc" id="L444">    }</span>
+
+    private void putRelationData(ESMapping mapping, SchemaItem schemaItem, Map&lt;String, Object&gt; dmlData,
+                                 Map&lt;String, Object&gt; esFieldData) {
+        // 添加父子文档关联信息
+<span class="nc bnc" id="L449" title="All 2 branches missed.">        if (!mapping.getRelations().isEmpty()) {</span>
+<span class="nc" id="L450">            mapping.getRelations().forEach((relationField, relationMapping) -&gt; {</span>
+<span class="nc" id="L451">                Map&lt;String, Object&gt; relations = new HashMap&lt;&gt;();</span>
+<span class="nc" id="L452">                relations.put(&quot;name&quot;, relationMapping.getName());</span>
+<span class="nc bnc" id="L453" title="All 2 branches missed.">                if (StringUtils.isNotEmpty(relationMapping.getParent())) {</span>
+<span class="nc" id="L454">                    FieldItem parentFieldItem = schemaItem.getSelectFields().get(relationMapping.getParent());</span>
+<span class="nc" id="L455">                    String columnName = parentFieldItem.getColumnItems().iterator().next().getColumnName();</span>
+<span class="nc" id="L456">                    Object parentVal = getValFromData(mapping, dmlData, parentFieldItem.getFieldName(), columnName);</span>
+<span class="nc bnc" id="L457" title="All 2 branches missed.">                    if (parentVal != null) {</span>
+<span class="nc" id="L458">                        relations.put(&quot;parent&quot;, parentVal.toString());</span>
+<span class="nc" id="L459">                        esFieldData.put(&quot;$parent_routing&quot;, parentVal.toString());</span>
+
+                    }
+                }
+<span class="nc" id="L463">                esFieldData.put(relationField, relations);</span>
+<span class="nc" id="L464">            });</span>
+        }
+<span class="nc" id="L466">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.3.201901230119</span></div></body></html>

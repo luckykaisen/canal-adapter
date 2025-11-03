@@ -1,0 +1,411 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>MappingConfig.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">canal client adapter launcher module for otter 1.1.8</a> &gt; <a href="../index.html" class="el_bundle">client-adapter.hbase</a> &gt; <a href="index.source.html" class="el_package">com.alibaba.otter.canal.client.adapter.hbase.config</a> &gt; <span class="el_source">MappingConfig.java</span></div><h1>MappingConfig.java</h1><pre class="source lang-java linenums">package com.alibaba.otter.canal.client.adapter.hbase.config;
+
+import com.alibaba.otter.canal.client.adapter.support.AdapterConfig;
+
+import java.util.*;
+
+/**
+ * HBase表映射配置
+ *
+ * @author rewerma 2018-8-21 下午06:45:49
+ * @version 1.0.0
+ */
+<span class="nc" id="L13">public class MappingConfig implements AdapterConfig {</span>
+
+    private String       dataSourceKey;   // 数据源key
+
+    private String       outerAdapterKey; // adapter key
+
+    private String       groupId;         // groupId
+
+    private String       destination;     // canal实例或MQ的topic
+
+    private HbaseMapping hbaseMapping;    // hbase映射配置
+
+    public String getDataSourceKey() {
+<span class="nc" id="L26">        return dataSourceKey;</span>
+    }
+
+    public void setDataSourceKey(String dataSourceKey) {
+<span class="nc" id="L30">        this.dataSourceKey = dataSourceKey;</span>
+<span class="nc" id="L31">    }</span>
+
+    public String getGroupId() {
+<span class="nc" id="L34">        return groupId;</span>
+    }
+
+    public void setGroupId(String groupId) {
+<span class="nc" id="L38">        this.groupId = groupId;</span>
+<span class="nc" id="L39">    }</span>
+
+    public String getOuterAdapterKey() {
+<span class="nc" id="L42">        return outerAdapterKey;</span>
+    }
+
+    public void setOuterAdapterKey(String outerAdapterKey) {
+<span class="nc" id="L46">        this.outerAdapterKey = outerAdapterKey;</span>
+<span class="nc" id="L47">    }</span>
+
+    public String getDestination() {
+<span class="nc" id="L50">        return destination;</span>
+    }
+
+    public void setDestination(String destination) {
+<span class="nc" id="L54">        this.destination = destination;</span>
+<span class="nc" id="L55">    }</span>
+
+    public HbaseMapping getHbaseMapping() {
+<span class="nc" id="L58">        return hbaseMapping;</span>
+    }
+
+    public void setHbaseMapping(HbaseMapping hbaseMapping) {
+<span class="nc" id="L62">        this.hbaseMapping = hbaseMapping;</span>
+<span class="nc" id="L63">    }</span>
+
+    public AdapterMapping getMapping() {
+<span class="nc" id="L66">        return hbaseMapping;</span>
+    }
+
+    public void validate() {
+<span class="nc bnc" id="L70" title="All 4 branches missed.">        if (hbaseMapping.database == null || hbaseMapping.database.isEmpty()) {</span>
+<span class="nc" id="L71">            throw new NullPointerException(&quot;hbaseMapping.database&quot;);</span>
+        }
+<span class="nc bnc" id="L73" title="All 4 branches missed.">        if (hbaseMapping.table == null || hbaseMapping.table.isEmpty()) {</span>
+<span class="nc" id="L74">            throw new NullPointerException(&quot;hbaseMapping.table&quot;);</span>
+        }
+<span class="nc bnc" id="L76" title="All 4 branches missed.">        if (hbaseMapping.hbaseTable == null || hbaseMapping.hbaseTable.isEmpty()) {</span>
+<span class="nc" id="L77">            throw new NullPointerException(&quot;hbaseMapping.hbaseTable&quot;);</span>
+        }
+<span class="nc bnc" id="L79" title="All 2 branches missed.">        if (hbaseMapping.mode == null) {</span>
+<span class="nc" id="L80">            throw new NullPointerException(&quot;hbaseMapping.mode&quot;);</span>
+        }
+<span class="nc bnc" id="L82" title="All 4 branches missed.">        if (hbaseMapping.rowKey != null &amp;&amp; hbaseMapping.rowKeyColumn != null) {</span>
+<span class="nc" id="L83">            throw new RuntimeException(&quot;已配置了复合主键作为RowKey，无需再指定RowKey列&quot;);</span>
+        }
+<span class="nc" id="L85">    }</span>
+
+    @Override
+    public boolean equals(Object o) {
+<span class="nc bnc" id="L89" title="All 2 branches missed.">        if (this == o) return true;</span>
+<span class="nc bnc" id="L90" title="All 4 branches missed.">        if (o == null || getClass() != o.getClass()) return false;</span>
+
+<span class="nc" id="L92">        MappingConfig config = (MappingConfig) o;</span>
+
+<span class="nc bnc" id="L94" title="All 4 branches missed.">        return hbaseMapping != null ? hbaseMapping.equals(config.hbaseMapping) : config.hbaseMapping == null;</span>
+    }
+
+    @Override
+    public int hashCode() {
+<span class="nc bnc" id="L99" title="All 2 branches missed.">        return hbaseMapping != null ? hbaseMapping.hashCode() : 0;</span>
+    }
+
+<span class="nc" id="L102">    public static class ColumnItem {</span>
+
+<span class="nc" id="L104">        private boolean isRowKey = false;</span>
+        private Integer rowKeyLen;
+        private String  column;
+        private String  family;
+        private String  qualifier;
+        private String  type;
+
+        public boolean isRowKey() {
+<span class="nc" id="L112">            return isRowKey;</span>
+        }
+
+        public void setRowKey(boolean rowKey) {
+<span class="nc" id="L116">            isRowKey = rowKey;</span>
+<span class="nc" id="L117">        }</span>
+
+        public Integer getRowKeyLen() {
+<span class="nc" id="L120">            return rowKeyLen;</span>
+        }
+
+        public void setRowKeyLen(Integer rowKeyLen) {
+<span class="nc" id="L124">            this.rowKeyLen = rowKeyLen;</span>
+<span class="nc" id="L125">        }</span>
+
+        public String getColumn() {
+<span class="nc" id="L128">            return column;</span>
+        }
+
+        public void setColumn(String column) {
+<span class="nc" id="L132">            this.column = column;</span>
+<span class="nc" id="L133">        }</span>
+
+        public String getFamily() {
+<span class="nc" id="L136">            return family;</span>
+        }
+
+        public void setFamily(String family) {
+<span class="nc" id="L140">            this.family = family;</span>
+<span class="nc" id="L141">        }</span>
+
+        public String getQualifier() {
+<span class="nc" id="L144">            return qualifier;</span>
+        }
+
+        public void setQualifier(String qualifier) {
+<span class="nc" id="L148">            this.qualifier = qualifier;</span>
+<span class="nc" id="L149">        }</span>
+
+        public String getType() {
+<span class="nc" id="L152">            return type;</span>
+        }
+
+        public void setType(String type) {
+<span class="nc" id="L156">            this.type = type;</span>
+<span class="nc" id="L157">        }</span>
+
+        @Override
+        public boolean equals(Object o) {
+<span class="nc bnc" id="L161" title="All 2 branches missed.">            if (this == o) return true;</span>
+<span class="nc bnc" id="L162" title="All 4 branches missed.">            if (o == null || getClass() != o.getClass()) return false;</span>
+<span class="nc" id="L163">            ColumnItem that = (ColumnItem) o;</span>
+<span class="nc" id="L164">            return Objects.equals(column, that.column);</span>
+        }
+
+        @Override
+        public int hashCode() {
+
+<span class="nc" id="L170">            return Objects.hash(column);</span>
+        }
+    }
+
+<span class="nc" id="L174">    public enum Mode {</span>
+<span class="nc" id="L175">                      STRING(&quot;STRING&quot;), NATIVE(&quot;NATIVE&quot;), PHOENIX(&quot;PHOENIX&quot;);</span>
+
+        private String type;
+
+        public String getType() {
+<span class="nc" id="L180">            return type;</span>
+        }
+
+<span class="nc" id="L183">        Mode(String type){</span>
+<span class="nc" id="L184">            this.type = type;</span>
+<span class="nc" id="L185">        }</span>
+    }
+
+<span class="nc" id="L188">    public static class HbaseMapping implements AdapterMapping {</span>
+
+<span class="nc" id="L190">        private Mode                    mode               = Mode.STRING;           // hbase默认转换格式</span>
+        private String                  database;                                   // 数据库名或schema名
+        private String                  table;                                      // 表面名
+        private String                  hbaseTable;                                 // hbase表名
+<span class="nc" id="L194">        private String                  family             = &quot;CF&quot;;                  // 默认统一column family</span>
+<span class="nc" id="L195">        private boolean                 uppercaseQualifier = true;                  // 是否转大写</span>
+<span class="nc" id="L196">        private boolean                 autoCreateTable    = false;                 // 同步时HBase中表不存在的情况下自动建表</span>
+        private String                  rowKey;                                     // 指定复合主键为rowKey
+        private Map&lt;String, String&gt;     columns;                                    // 字段映射
+        private List&lt;String&gt;            excludeColumns;                             // 不映射的字段
+        private ColumnItem              rowKeyColumn;                               // rowKey字段
+        private String                  etlCondition;                               // etl条件sql
+
+<span class="nc" id="L203">        private Map&lt;String, ColumnItem&gt; columnItems        = new LinkedHashMap&lt;&gt;(); // 转换后的字段映射列表</span>
+<span class="nc" id="L204">        private Set&lt;String&gt;             families           = new LinkedHashSet&lt;&gt;(); // column family列表</span>
+<span class="nc" id="L205">        private int                     readBatch          = 5000;</span>
+<span class="nc" id="L206">        private int                     commitBatch        = 5000;                  // etl等批量提交大小</span>
+
+        public Mode getMode() {
+<span class="nc" id="L209">            return mode;</span>
+        }
+
+        public void setMode(Mode mode) {
+<span class="nc" id="L213">            this.mode = mode;</span>
+<span class="nc" id="L214">        }</span>
+
+        public String getDatabase() {
+<span class="nc" id="L217">            return database;</span>
+        }
+
+        public void setDatabase(String database) {
+<span class="nc" id="L221">            this.database = database;</span>
+<span class="nc" id="L222">        }</span>
+
+        public String getTable() {
+<span class="nc" id="L225">            return table;</span>
+        }
+
+        public void setTable(String table) {
+<span class="nc" id="L229">            this.table = table;</span>
+<span class="nc" id="L230">        }</span>
+
+        public String getHbaseTable() {
+<span class="nc" id="L233">            return hbaseTable;</span>
+        }
+
+        public void setHbaseTable(String hbaseTable) {
+<span class="nc" id="L237">            this.hbaseTable = hbaseTable;</span>
+<span class="nc" id="L238">        }</span>
+
+        public Map&lt;String, String&gt; getColumns() {
+<span class="nc" id="L241">            return columns;</span>
+        }
+
+        public boolean isAutoCreateTable() {
+<span class="nc" id="L245">            return autoCreateTable;</span>
+        }
+
+        public void setAutoCreateTable(boolean autoCreateTable) {
+<span class="nc" id="L249">            this.autoCreateTable = autoCreateTable;</span>
+<span class="nc" id="L250">        }</span>
+
+        public int getReadBatch() {
+<span class="nc" id="L253">            return readBatch;</span>
+        }
+
+        public void setReadBatch(int readBatch) {
+<span class="nc" id="L257">            this.readBatch = readBatch;</span>
+<span class="nc" id="L258">        }</span>
+
+        public int getCommitBatch() {
+<span class="nc" id="L261">            return commitBatch;</span>
+        }
+
+        public void setCommitBatch(int commitBatch) {
+<span class="nc" id="L265">            this.commitBatch = commitBatch;</span>
+<span class="nc" id="L266">        }</span>
+
+        public String getRowKey() {
+<span class="nc" id="L269">            return rowKey;</span>
+        }
+
+        public void setRowKey(String rowKey) {
+<span class="nc" id="L273">            this.rowKey = rowKey;</span>
+<span class="nc" id="L274">        }</span>
+
+        public String getEtlCondition() {
+<span class="nc" id="L277">            return etlCondition;</span>
+        }
+
+        public void setEtlCondition(String etlCondition) {
+<span class="nc" id="L281">            this.etlCondition = etlCondition;</span>
+<span class="nc" id="L282">        }</span>
+
+        public void setColumns(Map&lt;String, String&gt; columns) {
+<span class="nc" id="L285">            this.columns = columns;</span>
+
+<span class="nc bnc" id="L287" title="All 2 branches missed.">            if (columns != null) {</span>
+<span class="nc bnc" id="L288" title="All 2 branches missed.">                for (Map.Entry&lt;String, String&gt; columnField : columns.entrySet()) {</span>
+<span class="nc" id="L289">                    String field = columnField.getValue();</span>
+<span class="nc" id="L290">                    String type = null;</span>
+<span class="nc bnc" id="L291" title="All 2 branches missed.">                    if (field != null) {</span>
+                        // 解析类型
+<span class="nc" id="L293">                        int i = field.indexOf(&quot;$&quot;);</span>
+<span class="nc bnc" id="L294" title="All 2 branches missed.">                        if (i &gt; -1) {</span>
+<span class="nc" id="L295">                            type = field.substring(i + 1);</span>
+<span class="nc" id="L296">                            field = field.substring(0, i);</span>
+                        }
+                    }
+<span class="nc" id="L299">                    ColumnItem columnItem = new ColumnItem();</span>
+<span class="nc" id="L300">                    columnItem.setColumn(columnField.getKey());</span>
+<span class="nc" id="L301">                    columnItem.setType(type);</span>
+<span class="nc bnc" id="L302" title="All 4 branches missed.">                    if (field != null &amp;&amp; field.toUpperCase().startsWith(&quot;ROWKEY&quot;)) {</span>
+<span class="nc" id="L303">                        int idx = field.toUpperCase().indexOf(&quot;LEN:&quot;);</span>
+<span class="nc bnc" id="L304" title="All 2 branches missed.">                        if (idx &gt; -1) {</span>
+<span class="nc" id="L305">                            String len = field.substring(idx + 4);</span>
+                            try {
+<span class="nc" id="L307">                                columnItem.setRowKeyLen(Integer.parseInt(len));</span>
+<span class="nc" id="L308">                            } catch (Exception e) {</span>
+                                // ignore
+<span class="nc" id="L310">                            }</span>
+                        }
+<span class="nc" id="L312">                        columnItem.setRowKey(true);</span>
+<span class="nc" id="L313">                        rowKeyColumn = columnItem;</span>
+<span class="nc" id="L314">                    } else {</span>
+<span class="nc bnc" id="L315" title="All 4 branches missed.">                        if (field == null || field.equals(&quot;&quot;)) {</span>
+<span class="nc" id="L316">                            columnItem.setFamily(family);</span>
+<span class="nc" id="L317">                            columnItem.setQualifier(columnField.getKey());</span>
+                        } else {
+<span class="nc" id="L319">                            int len = field.indexOf(&quot;:&quot;);</span>
+<span class="nc bnc" id="L320" title="All 2 branches missed.">                            if (len &gt; -1) {</span>
+<span class="nc" id="L321">                                columnItem.setFamily(field.substring(0, len));</span>
+<span class="nc" id="L322">                                columnItem.setQualifier(field.substring(len + 1));</span>
+                            } else {
+<span class="nc" id="L324">                                columnItem.setFamily(family);</span>
+<span class="nc" id="L325">                                columnItem.setQualifier(field);</span>
+                            }
+                        }
+<span class="nc bnc" id="L328" title="All 2 branches missed.">                        if (uppercaseQualifier) {</span>
+<span class="nc" id="L329">                            columnItem.setQualifier(columnItem.getQualifier().toUpperCase());</span>
+                        }
+<span class="nc" id="L331">                        families.add(columnItem.getFamily());</span>
+                    }
+
+<span class="nc" id="L334">                    columnItems.put(columnField.getKey(), columnItem);</span>
+<span class="nc" id="L335">                }</span>
+            } else {
+<span class="nc" id="L337">                this.columns = new LinkedHashMap&lt;&gt;();</span>
+            }
+<span class="nc" id="L339">        }</span>
+
+        public List&lt;String&gt; getExcludeColumns() {
+<span class="nc" id="L342">            return excludeColumns;</span>
+        }
+
+        public void setExcludeColumns(List&lt;String&gt; excludeColumns) {
+<span class="nc" id="L346">            this.excludeColumns = excludeColumns;</span>
+<span class="nc" id="L347">        }</span>
+
+        public String getFamily() {
+<span class="nc" id="L350">            return family;</span>
+        }
+
+        public void setFamily(String family) {
+<span class="nc" id="L354">            this.family = family;</span>
+<span class="nc bnc" id="L355" title="All 2 branches missed.">            if (family == null) {</span>
+<span class="nc" id="L356">                this.family = &quot;CF&quot;;</span>
+            }
+<span class="nc" id="L358">        }</span>
+
+        public boolean isUppercaseQualifier() {
+<span class="nc" id="L361">            return uppercaseQualifier;</span>
+        }
+
+        public void setUppercaseQualifier(boolean uppercaseQualifier) {
+<span class="nc" id="L365">            this.uppercaseQualifier = uppercaseQualifier;</span>
+<span class="nc" id="L366">        }</span>
+
+        public ColumnItem getRowKeyColumn() {
+<span class="nc" id="L369">            return rowKeyColumn;</span>
+        }
+
+        public void setRowKeyColumn(ColumnItem rowKeyColumn) {
+<span class="nc" id="L373">            this.rowKeyColumn = rowKeyColumn;</span>
+<span class="nc" id="L374">        }</span>
+
+        public Map&lt;String, ColumnItem&gt; getColumnItems() {
+<span class="nc" id="L377">            return columnItems;</span>
+        }
+
+        public void setColumnItems(Map&lt;String, ColumnItem&gt; columnItems) {
+<span class="nc" id="L381">            this.columnItems = columnItems;</span>
+<span class="nc" id="L382">        }</span>
+
+        public Set&lt;String&gt; getFamilies() {
+<span class="nc" id="L385">            return families;</span>
+        }
+
+        public void setFamilies(Set&lt;String&gt; families) {
+<span class="nc" id="L389">            this.families = families;</span>
+<span class="nc" id="L390">        }</span>
+
+        @Override
+        public boolean equals(Object o) {
+<span class="nc bnc" id="L394" title="All 2 branches missed.">            if (this == o) return true;</span>
+<span class="nc bnc" id="L395" title="All 4 branches missed.">            if (o == null || getClass() != o.getClass()) return false;</span>
+
+<span class="nc" id="L397">            HbaseMapping hbaseMapping = (HbaseMapping) o;</span>
+
+<span class="nc bnc" id="L399" title="All 6 branches missed.">            if (table != null ? !table.equals(hbaseMapping.table) : hbaseMapping.table != null) return false;</span>
+<span class="nc bnc" id="L400" title="All 4 branches missed.">            return hbaseTable != null ? hbaseTable.equals(hbaseMapping.hbaseTable) : hbaseMapping.hbaseTable == null;</span>
+        }
+
+        @Override
+        public int hashCode() {
+<span class="nc bnc" id="L405" title="All 2 branches missed.">            int result = table != null ? table.hashCode() : 0;</span>
+<span class="nc bnc" id="L406" title="All 2 branches missed.">            result = 31 * result + (hbaseTable != null ? hbaseTable.hashCode() : 0);</span>
+<span class="nc" id="L407">            return result;</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.3.201901230119</span></div></body></html>

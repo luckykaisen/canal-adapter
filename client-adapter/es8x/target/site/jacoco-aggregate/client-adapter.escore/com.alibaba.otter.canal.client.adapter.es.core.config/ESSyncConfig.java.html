@@ -1,0 +1,258 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>ESSyncConfig.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">canal client adapter es v8x module for otter 1.1.8</a> &gt; <a href="../index.html" class="el_bundle">client-adapter.escore</a> &gt; <a href="index.source.html" class="el_package">com.alibaba.otter.canal.client.adapter.es.core.config</a> &gt; <span class="el_source">ESSyncConfig.java</span></div><h1>ESSyncConfig.java</h1><pre class="source lang-java linenums">package com.alibaba.otter.canal.client.adapter.es.core.config;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import com.alibaba.otter.canal.client.adapter.support.AdapterConfig;
+import org.springframework.beans.factory.annotation.Value;
+
+/**
+ * ES 映射配置
+ *
+ * @author rewerma 2018-11-01
+ * @version 1.0.0
+ */
+<span class="nc" id="L17">public class ESSyncConfig implements AdapterConfig {</span>
+
+    private String    dataSourceKey;    // 数据源key
+
+    private String    outerAdapterKey;  // adapter key
+
+    private String    groupId;          // group id
+
+    private String    destination;      // canal destination
+
+    private ESMapping esMapping;
+
+<span class="nc" id="L29">    private String    esVersion = &quot;es6&quot;;</span>
+
+    public void validate() {
+<span class="nc bnc" id="L32" title="All 2 branches missed.">        if (esMapping.index == null) {</span>
+<span class="nc" id="L33">            throw new NullPointerException(&quot;esMapping._index&quot;);</span>
+        }
+<span class="nc bnc" id="L35" title="All 4 branches missed.">        if (&quot;es6&quot;.equals(esVersion) &amp;&amp; esMapping.type == null) {</span>
+<span class="nc" id="L36">            throw new NullPointerException(&quot;esMapping._type&quot;);</span>
+        }
+<span class="nc bnc" id="L38" title="All 4 branches missed.">        if (esMapping.id == null &amp;&amp; esMapping.getPk() == null) {</span>
+<span class="nc" id="L39">            throw new NullPointerException(&quot;esMapping._id or esMapping.pk&quot;);</span>
+        }
+<span class="nc bnc" id="L41" title="All 2 branches missed.">        if (esMapping.sql == null) {</span>
+<span class="nc" id="L42">            throw new NullPointerException(&quot;esMapping.sql&quot;);</span>
+        }
+<span class="nc" id="L44">    }</span>
+
+    public String getDataSourceKey() {
+<span class="nc" id="L47">        return dataSourceKey;</span>
+    }
+
+    public void setDataSourceKey(String dataSourceKey) {
+<span class="nc" id="L51">        this.dataSourceKey = dataSourceKey;</span>
+<span class="nc" id="L52">    }</span>
+
+    public String getOuterAdapterKey() {
+<span class="nc" id="L55">        return outerAdapterKey;</span>
+    }
+
+    public void setOuterAdapterKey(String outerAdapterKey) {
+<span class="nc" id="L59">        this.outerAdapterKey = outerAdapterKey;</span>
+<span class="nc" id="L60">    }</span>
+
+    public String getGroupId() {
+<span class="nc" id="L63">        return groupId;</span>
+    }
+
+    public void setGroupId(String groupId) {
+<span class="nc" id="L67">        this.groupId = groupId;</span>
+<span class="nc" id="L68">    }</span>
+
+    public String getDestination() {
+<span class="nc" id="L71">        return destination;</span>
+    }
+
+    public void setDestination(String destination) {
+<span class="nc" id="L75">        this.destination = destination;</span>
+<span class="nc" id="L76">    }</span>
+
+    public ESMapping getEsMapping() {
+<span class="nc" id="L79">        return esMapping;</span>
+    }
+
+    public void setEsMapping(ESMapping esMapping) {
+<span class="nc" id="L83">        this.esMapping = esMapping;</span>
+<span class="nc" id="L84">    }</span>
+
+    public ESMapping getMapping() {
+<span class="nc" id="L87">        return esMapping;</span>
+    }
+
+    public String getEsVersion() {
+<span class="nc" id="L91">        return esVersion;</span>
+    }
+
+    public void setEsVersion(String esVersion) {
+<span class="nc" id="L95">        this.esVersion = esVersion;</span>
+<span class="nc" id="L96">    }</span>
+
+<span class="nc" id="L98">    public static class ESMapping implements AdapterMapping {</span>
+
+        @Value(&quot;${_index}&quot;)
+        private String index;
+
+        @Value(&quot;${_type}&quot;)
+        private String type;
+
+        @Value(&quot;${_id}&quot;)
+        private String id;
+<span class="nc" id="L108">        private boolean                      upsert          = false;</span>
+        private String                       pk;
+<span class="nc" id="L110">        private Map&lt;String, RelationMapping&gt; relations       = new LinkedHashMap&lt;&gt;();</span>
+        private String                       sql;
+        // 对象字段, 例: objFields:
+        // - _labels: array:;
+<span class="nc" id="L114">        private Map&lt;String, String&gt;          objFields       = new LinkedHashMap&lt;&gt;();</span>
+<span class="nc" id="L115">        private List&lt;String&gt;                 skips           = new ArrayList&lt;&gt;();</span>
+<span class="nc" id="L116">        private int                          commitBatch     = 1000;</span>
+        private String                       etlCondition;
+<span class="nc" id="L118">        private boolean                      syncByTimestamp = false;                // 是否按时间戳定时同步</span>
+        private Long                         syncInterval;                           // 同步时间间隔
+
+        private SchemaItem                   schemaItem;                             // sql解析结果模型
+
+        public String getIndex() {
+<span class="nc" id="L124">            return index;</span>
+        }
+
+        public void setIndex(String index) {
+<span class="nc" id="L128">            this.index = index;</span>
+<span class="nc" id="L129">        }</span>
+
+        public String getType() {
+<span class="nc" id="L132">            return type;</span>
+        }
+
+        public void setType(String type) {
+<span class="nc" id="L136">            this.type = type;</span>
+<span class="nc" id="L137">        }</span>
+
+        public String getId() {
+<span class="nc" id="L140">            return id;</span>
+        }
+
+        public void setId(String id) {
+<span class="nc" id="L144">            this.id = id;</span>
+<span class="nc" id="L145">        }</span>
+
+        public boolean isUpsert() {
+<span class="nc" id="L148">            return upsert;</span>
+        }
+
+        public void setUpsert(boolean upsert) {
+<span class="nc" id="L152">            this.upsert = upsert;</span>
+<span class="nc" id="L153">        }</span>
+
+        public String getPk() {
+<span class="nc" id="L156">            return pk;</span>
+        }
+
+        public void setPk(String pk) {
+<span class="nc" id="L160">            this.pk = pk;</span>
+<span class="nc" id="L161">        }</span>
+
+        public Map&lt;String, String&gt; getObjFields() {
+<span class="nc" id="L164">            return objFields;</span>
+        }
+
+        public void setObjFields(Map&lt;String, String&gt; objFields) {
+<span class="nc" id="L168">            this.objFields = objFields;</span>
+<span class="nc" id="L169">        }</span>
+
+        public List&lt;String&gt; getSkips() {
+<span class="nc" id="L172">            return skips;</span>
+        }
+
+        public void setSkips(List&lt;String&gt; skips) {
+<span class="nc" id="L176">            this.skips = skips;</span>
+<span class="nc" id="L177">        }</span>
+
+        public Map&lt;String, RelationMapping&gt; getRelations() {
+<span class="nc" id="L180">            return relations;</span>
+        }
+
+        public void setRelations(Map&lt;String, RelationMapping&gt; relations) {
+<span class="nc" id="L184">            this.relations = relations;</span>
+<span class="nc" id="L185">        }</span>
+
+        public String getSql() {
+<span class="nc" id="L188">            return sql;</span>
+        }
+
+        public void setSql(String sql) {
+<span class="nc" id="L192">            this.sql = sql;</span>
+<span class="nc" id="L193">        }</span>
+
+        public int getCommitBatch() {
+<span class="nc" id="L196">            return commitBatch;</span>
+        }
+
+        public void setCommitBatch(int commitBatch) {
+<span class="nc" id="L200">            this.commitBatch = commitBatch;</span>
+<span class="nc" id="L201">        }</span>
+
+        public String getEtlCondition() {
+<span class="nc" id="L204">            return etlCondition;</span>
+        }
+
+        public void setEtlCondition(String etlCondition) {
+<span class="nc" id="L208">            this.etlCondition = etlCondition;</span>
+<span class="nc" id="L209">        }</span>
+
+        public Long getSyncInterval() {
+<span class="nc" id="L212">            return syncInterval;</span>
+        }
+
+        public void setSyncInterval(Long syncInterval) {
+<span class="nc" id="L216">            this.syncInterval = syncInterval;</span>
+<span class="nc" id="L217">        }</span>
+
+        public boolean isSyncByTimestamp() {
+<span class="nc" id="L220">            return syncByTimestamp;</span>
+        }
+
+        public void setSyncByTimestamp(boolean syncByTimestamp) {
+<span class="nc" id="L224">            this.syncByTimestamp = syncByTimestamp;</span>
+<span class="nc" id="L225">        }</span>
+
+        public SchemaItem getSchemaItem() {
+<span class="nc" id="L228">            return schemaItem;</span>
+        }
+
+        public void setSchemaItem(SchemaItem schemaItem) {
+<span class="nc" id="L232">            this.schemaItem = schemaItem;</span>
+<span class="nc" id="L233">        }</span>
+    }
+
+<span class="nc" id="L236">    public static class RelationMapping {</span>
+
+        private String name;
+        private String parent;
+
+        public String getName() {
+<span class="nc" id="L242">            return name;</span>
+        }
+
+        public void setName(String name) {
+<span class="nc" id="L246">            this.name = name;</span>
+<span class="nc" id="L247">        }</span>
+
+        public String getParent() {
+<span class="nc" id="L250">            return parent;</span>
+        }
+
+        public void setParent(String parent) {
+<span class="nc" id="L254">            this.parent = parent;</span>
+<span class="nc" id="L255">        }</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.3.201901230119</span></div></body></html>

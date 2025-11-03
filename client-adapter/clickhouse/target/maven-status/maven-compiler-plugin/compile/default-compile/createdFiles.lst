@@ -1,0 +1,15 @@
+com/alibaba/otter/canal/client/adapter/clickhouse/config/MirrorDbConfig.class
+com/alibaba/otter/canal/client/adapter/clickhouse/config/MappingConfig.class
+com/alibaba/otter/canal/client/adapter/clickhouse/support/SyncUtil.class
+com/alibaba/otter/canal/client/adapter/clickhouse/service/ClickHouseEtlService.class
+com/alibaba/otter/canal/client/adapter/clickhouse/service/ClickHouseMirrorDbBatchSyncService.class
+com/alibaba/otter/canal/client/adapter/clickhouse/ClickHouseAdapter.class
+com/alibaba/otter/canal/client/adapter/clickhouse/support/BatchExecutor.class
+com/alibaba/otter/canal/client/adapter/clickhouse/monitor/ClickHouseConfigMonitor.class
+com/alibaba/otter/canal/client/adapter/clickhouse/monitor/ClickHouseConfigMonitor$1.class
+com/alibaba/otter/canal/client/adapter/clickhouse/support/SingleDml.class
+com/alibaba/otter/canal/client/adapter/clickhouse/support/SyncUtil$1.class
+com/alibaba/otter/canal/client/adapter/clickhouse/config/MappingConfig$DbMapping.class
+com/alibaba/otter/canal/client/adapter/clickhouse/config/ConfigLoader.class
+com/alibaba/otter/canal/client/adapter/clickhouse/service/ClickHouseBatchSyncService.class
+com/alibaba/otter/canal/client/adapter/clickhouse/monitor/ClickHouseConfigMonitor$FileListener.class

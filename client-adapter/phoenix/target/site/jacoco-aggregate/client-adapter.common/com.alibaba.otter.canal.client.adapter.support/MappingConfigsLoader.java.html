@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>MappingConfigsLoader.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">canal client adapter phoenix module for otter 1.1.8</a> &gt; <a href="../index.html" class="el_bundle">client-adapter.common</a> &gt; <a href="index.source.html" class="el_package">com.alibaba.otter.canal.client.adapter.support</a> &gt; <span class="el_source">MappingConfigsLoader.java</span></div><h1>MappingConfigsLoader.java</h1><pre class="source lang-java linenums">package com.alibaba.otter.canal.client.adapter.support;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
+
+<span class="nc" id="L12">public class MappingConfigsLoader {</span>
+
+    public static Map&lt;String, String&gt; loadConfigs(String name) {
+<span class="nc" id="L15">        Map&lt;String, String&gt; configContentMap = new HashMap&lt;&gt;();</span>
+
+        // 先取本地文件，再取类路径
+<span class="nc" id="L18">        File configDir = new File(&quot;..&quot; + File.separator + Constant.CONF_DIR + File.separator + name);</span>
+<span class="nc bnc" id="L19" title="All 2 branches missed.">        if (!configDir.exists()) {</span>
+<span class="nc" id="L20">            URL url = MappingConfigsLoader.class.getClassLoader().getResource(&quot;&quot;);</span>
+<span class="nc bnc" id="L21" title="All 2 branches missed.">            if (url != null) {</span>
+<span class="nc" id="L22">                configDir = new File(url.getPath() + name + File.separator);</span>
+            }
+        }
+
+<span class="nc" id="L26">        File[] files = configDir.listFiles();</span>
+<span class="nc bnc" id="L27" title="All 2 branches missed.">        if (files != null) {</span>
+<span class="nc bnc" id="L28" title="All 2 branches missed.">            for (File file : files) {</span>
+<span class="nc" id="L29">                String fileName = file.getName();</span>
+<span class="nc bnc" id="L30" title="All 2 branches missed.">                if (!fileName.endsWith(&quot;.yml&quot;)) {</span>
+<span class="nc" id="L31">                    continue;</span>
+                }
+<span class="nc" id="L33">                try (InputStream in = new FileInputStream(file)) {</span>
+<span class="nc" id="L34">                    byte[] bytes = new byte[in.available()];</span>
+<span class="nc" id="L35">                    in.read(bytes);</span>
+<span class="nc" id="L36">                    String configContent = new String(bytes, StandardCharsets.UTF_8);</span>
+<span class="nc" id="L37">                    configContentMap.put(fileName, configContent);</span>
+<span class="nc" id="L38">                } catch (IOException e) {</span>
+<span class="nc" id="L39">                    throw new RuntimeException(&quot;Read &quot; + name + &quot;mapping config: &quot; + fileName + &quot; error. &quot;, e);</span>
+<span class="nc" id="L40">                }</span>
+            }
+        }
+
+<span class="nc" id="L44">        return configContentMap;</span>
+    }
+
+    public static String loadConfig(String name) {
+        // 先取本地文件，再取类路径
+<span class="nc" id="L49">        File filePath = new File(&quot;..&quot; + File.separator + Constant.CONF_DIR + File.separator + name);</span>
+<span class="nc bnc" id="L50" title="All 2 branches missed.">        if (!filePath.exists()) {</span>
+<span class="nc" id="L51">            URL url = MappingConfigsLoader.class.getClassLoader().getResource(&quot;&quot;);</span>
+<span class="nc bnc" id="L52" title="All 2 branches missed.">            if (url != null) {</span>
+<span class="nc" id="L53">                filePath = new File(url.getPath() + name);</span>
+            }
+        }
+<span class="nc bnc" id="L56" title="All 2 branches missed.">        if (filePath.exists()) {</span>
+<span class="nc" id="L57">            String fileName = filePath.getName();</span>
+<span class="nc bnc" id="L58" title="All 4 branches missed.">            if (!(fileName.endsWith(&quot;.yml&quot;) || fileName.endsWith(&quot;.yaml&quot;))) {</span>
+<span class="nc" id="L59">                return null;</span>
+            }
+<span class="nc" id="L61">            try (InputStream in = new FileInputStream(filePath)) {</span>
+<span class="nc" id="L62">                byte[] bytes = new byte[in.available()];</span>
+<span class="nc" id="L63">                in.read(bytes);</span>
+<span class="nc" id="L64">                return new String(bytes, StandardCharsets.UTF_8);</span>
+<span class="nc" id="L65">            } catch (IOException e) {</span>
+<span class="nc" id="L66">                throw new RuntimeException(&quot;Read mapping config: &quot; + filePath.getAbsolutePath() + &quot; error. &quot;, e);</span>
+            }
+        }
+<span class="nc" id="L69">        return null;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.3.201901230119</span></div></body></html>

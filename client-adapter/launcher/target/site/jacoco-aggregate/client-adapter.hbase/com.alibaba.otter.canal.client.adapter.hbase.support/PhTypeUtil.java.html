@@ -1,0 +1,610 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>PhTypeUtil.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">canal client adapter launcher module for otter 1.1.8</a> &gt; <a href="../index.html" class="el_bundle">client-adapter.hbase</a> &gt; <a href="index.source.html" class="el_package">com.alibaba.otter.canal.client.adapter.hbase.support</a> &gt; <span class="el_source">PhTypeUtil.java</span></div><h1>PhTypeUtil.java</h1><pre class="source lang-java linenums">package com.alibaba.otter.canal.client.adapter.hbase.support;
+
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.math.MathContext;
+import java.math.RoundingMode;
+import java.sql.Timestamp;
+import java.util.Date;
+
+import org.apache.hadoop.hbase.util.Bytes;
+
+import com.alibaba.otter.canal.client.adapter.support.Util;
+import com.google.common.math.LongMath;
+
+/**
+ * Phoenix类型转换工具类
+ *
+ * @author machengyuan 2018-8-21 下午06:14:26
+ * @version 1.0.0
+ */
+<span class="nc" id="L21">public class PhTypeUtil {</span>
+
+    public static byte[] toBytes(Object v, PhType phType) {
+<span class="nc bnc" id="L24" title="All 2 branches missed.">        if (v == null) return null;</span>
+<span class="nc" id="L25">        byte[] b = null;</span>
+<span class="nc bnc" id="L26" title="All 2 branches missed.">        if (phType == PhType.DEFAULT) {</span>
+<span class="nc" id="L27">            PhType phType1 = PhType.getType(v.getClass());</span>
+<span class="nc bnc" id="L28" title="All 4 branches missed.">            if (phType1 != null &amp;&amp; phType1 != PhType.DEFAULT) {</span>
+<span class="nc" id="L29">                toBytes(v, phType1);</span>
+            }
+<span class="nc bnc" id="L31" title="All 2 branches missed.">        } else if (phType == PhType.INTEGER) {</span>
+<span class="nc" id="L32">            b = new byte[Bytes.SIZEOF_INT];</span>
+<span class="nc" id="L33">            encodeInt(((Number) v).intValue(), b, 0);</span>
+<span class="nc bnc" id="L34" title="All 2 branches missed.">        } else if (phType == PhType.UNSIGNED_INT) {</span>
+<span class="nc" id="L35">            b = new byte[Bytes.SIZEOF_INT];</span>
+<span class="nc" id="L36">            encodeUnsignedInt(((Number) v).intValue(), b, 0);</span>
+<span class="nc bnc" id="L37" title="All 2 branches missed.">        } else if (phType == PhType.BIGINT) {</span>
+<span class="nc" id="L38">            b = new byte[Bytes.SIZEOF_LONG];</span>
+<span class="nc" id="L39">            encodeLong(((Number) v).longValue(), b, 0);</span>
+<span class="nc bnc" id="L40" title="All 2 branches missed.">        } else if (phType == PhType.UNSIGNED_LONG) {</span>
+<span class="nc" id="L41">            b = new byte[Bytes.SIZEOF_LONG];</span>
+<span class="nc" id="L42">            encodeUnsignedLong(((Number) v).longValue(), b, 0);</span>
+<span class="nc bnc" id="L43" title="All 2 branches missed.">        } else if (phType == PhType.SMALLINT) {</span>
+<span class="nc" id="L44">            b = new byte[Bytes.SIZEOF_SHORT];</span>
+<span class="nc" id="L45">            encodeShort(((Number) v).shortValue(), b, 0);</span>
+<span class="nc bnc" id="L46" title="All 2 branches missed.">        } else if (phType == PhType.UNSIGNED_SMALLINT) {</span>
+<span class="nc" id="L47">            b = new byte[Bytes.SIZEOF_SHORT];</span>
+<span class="nc" id="L48">            encodeUnsignedShort(((Number) v).shortValue(), b, 0);</span>
+<span class="nc bnc" id="L49" title="All 2 branches missed.">        } else if (phType == PhType.TINYINT) {</span>
+<span class="nc" id="L50">            b = new byte[Bytes.SIZEOF_BYTE];</span>
+<span class="nc" id="L51">            encodeByte(((Number) v).byteValue(), b, 0);</span>
+<span class="nc bnc" id="L52" title="All 2 branches missed.">        } else if (phType == PhType.UNSIGNED_TINYINT) {</span>
+<span class="nc" id="L53">            b = new byte[Bytes.SIZEOF_BYTE];</span>
+<span class="nc" id="L54">            encodeUnsignedByte(((Number) v).byteValue(), b, 0);</span>
+<span class="nc bnc" id="L55" title="All 2 branches missed.">        } else if (phType == PhType.FLOAT) {</span>
+<span class="nc" id="L56">            b = new byte[Bytes.SIZEOF_FLOAT];</span>
+<span class="nc" id="L57">            encodeFloat(((Number) v).floatValue(), b, 0);</span>
+<span class="nc bnc" id="L58" title="All 2 branches missed.">        } else if (phType == PhType.UNSIGNED_FLOAT) {</span>
+<span class="nc" id="L59">            b = new byte[Bytes.SIZEOF_FLOAT];</span>
+<span class="nc" id="L60">            encodeUnsignedFloat(((Number) v).floatValue(), b, 0);</span>
+<span class="nc bnc" id="L61" title="All 2 branches missed.">        } else if (phType == PhType.DOUBLE) {</span>
+<span class="nc" id="L62">            b = new byte[Bytes.SIZEOF_DOUBLE];</span>
+<span class="nc" id="L63">            encodeDouble(((Number) v).doubleValue(), b, 0);</span>
+<span class="nc bnc" id="L64" title="All 2 branches missed.">        } else if (phType == PhType.UNSIGNED_DOUBLE) {</span>
+<span class="nc" id="L65">            b = new byte[Bytes.SIZEOF_DOUBLE];</span>
+<span class="nc" id="L66">            encodeUnsignedDouble(((Number) v).doubleValue(), b, 0);</span>
+<span class="nc bnc" id="L67" title="All 2 branches missed.">        } else if (phType == PhType.BOOLEAN) {</span>
+<span class="nc bnc" id="L68" title="All 2 branches missed.">            if ((Boolean) v) {</span>
+<span class="nc" id="L69">                b = new byte[] { 1 };</span>
+            } else {
+<span class="nc" id="L71">                b = new byte[] { 0 };</span>
+            }
+<span class="nc bnc" id="L73" title="All 4 branches missed.">        } else if (phType == PhType.TIME || phType == PhType.DATE) {</span>
+<span class="nc" id="L74">            b = new byte[Bytes.SIZEOF_LONG];</span>
+<span class="nc" id="L75">            encodeDate(v, b, 0);</span>
+<span class="nc bnc" id="L76" title="All 2 branches missed.">        } else if (phType == PhType.TIMESTAMP) {</span>
+<span class="nc" id="L77">            b = new byte[Bytes.SIZEOF_LONG + Bytes.SIZEOF_INT];</span>
+<span class="nc" id="L78">            encodeTimestamp(v, b, 0);</span>
+<span class="nc bnc" id="L79" title="All 4 branches missed.">        } else if (phType == PhType.UNSIGNED_TIME || phType == PhType.UNSIGNED_DATE) {</span>
+<span class="nc" id="L80">            b = new byte[Bytes.SIZEOF_LONG];</span>
+<span class="nc" id="L81">            encodeUnsignedDate(v, b, 0);</span>
+<span class="nc bnc" id="L82" title="All 2 branches missed.">        } else if (phType == PhType.UNSIGNED_TIMESTAMP) {</span>
+<span class="nc" id="L83">            b = new byte[Bytes.SIZEOF_LONG + Bytes.SIZEOF_INT];</span>
+<span class="nc" id="L84">            encodeUnsignedTimestamp(v, b, 0);</span>
+<span class="nc bnc" id="L85" title="All 2 branches missed.">        } else if (phType == PhType.VARBINARY) {</span>
+<span class="nc" id="L86">            b = (byte[]) v;</span>
+<span class="nc bnc" id="L87" title="All 2 branches missed.">        } else if (phType == PhType.VARCHAR) {</span>
+<span class="nc" id="L88">            b = Bytes.toBytes(v.toString());</span>
+<span class="nc bnc" id="L89" title="All 2 branches missed.">        } else if (phType == PhType.DECIMAL) {</span>
+<span class="nc bnc" id="L90" title="All 2 branches missed.">            if (v instanceof BigDecimal) {</span>
+<span class="nc" id="L91">                b = encodeDecimal(v);</span>
+<span class="nc bnc" id="L92" title="All 2 branches missed.">            } else if (v instanceof Number) {</span>
+<span class="nc" id="L93">                b = encodeDecimal(new BigDecimal(v.toString()));</span>
+            }
+        }
+<span class="nc" id="L96">        return b;</span>
+    }
+
+    public static Object toObject(byte[] b, PhType phType) {
+<span class="nc bnc" id="L100" title="All 2 branches missed.">        if (b == null) return null;</span>
+<span class="nc" id="L101">        Object v = null;</span>
+<span class="nc bnc" id="L102" title="All 2 branches missed.">        if (phType == PhType.INTEGER) {</span>
+<span class="nc" id="L103">            v = decodeInt(b, 0);</span>
+<span class="nc bnc" id="L104" title="All 2 branches missed.">        } else if (phType == PhType.UNSIGNED_INT) {</span>
+<span class="nc" id="L105">            v = decodeUnsignedInt(b, 0);</span>
+<span class="nc bnc" id="L106" title="All 2 branches missed.">        } else if (phType == PhType.BIGINT) {</span>
+<span class="nc" id="L107">            v = decodeLong(b, 0);</span>
+<span class="nc bnc" id="L108" title="All 2 branches missed.">        } else if (phType == PhType.UNSIGNED_LONG) {</span>
+<span class="nc" id="L109">            v = decodeUnsignedLong(b, 0);</span>
+<span class="nc bnc" id="L110" title="All 2 branches missed.">        } else if (phType == PhType.SMALLINT) {</span>
+<span class="nc" id="L111">            v = decodeShort(b, 0);</span>
+<span class="nc bnc" id="L112" title="All 2 branches missed.">        } else if (phType == PhType.UNSIGNED_SMALLINT) {</span>
+<span class="nc" id="L113">            v = decodeUnsignedShort(b, 0);</span>
+<span class="nc bnc" id="L114" title="All 2 branches missed.">        } else if (phType == PhType.TINYINT) {</span>
+<span class="nc" id="L115">            v = decodeByte(b, 0);</span>
+<span class="nc bnc" id="L116" title="All 2 branches missed.">        } else if (phType == PhType.UNSIGNED_TINYINT) {</span>
+<span class="nc" id="L117">            v = decodeUnsignedByte(b, 0);</span>
+<span class="nc bnc" id="L118" title="All 2 branches missed.">        } else if (phType == PhType.FLOAT) {</span>
+<span class="nc" id="L119">            v = decodeFloat(b, 0);</span>
+<span class="nc bnc" id="L120" title="All 2 branches missed.">        } else if (phType == PhType.UNSIGNED_FLOAT) {</span>
+<span class="nc" id="L121">            v = decodeUnsignedFloat(b, 0);</span>
+<span class="nc bnc" id="L122" title="All 2 branches missed.">        } else if (phType == PhType.DOUBLE) {</span>
+<span class="nc" id="L123">            v = decodeDouble(b, 0);</span>
+<span class="nc bnc" id="L124" title="All 2 branches missed.">        } else if (phType == PhType.UNSIGNED_DOUBLE) {</span>
+<span class="nc" id="L125">            v = decodeUnsignedDouble(b, 0);</span>
+<span class="nc bnc" id="L126" title="All 2 branches missed.">        } else if (phType == PhType.BOOLEAN) {</span>
+<span class="nc" id="L127">            checkForSufficientLength(b, 0, Bytes.SIZEOF_BOOLEAN);</span>
+<span class="nc bnc" id="L128" title="All 2 branches missed.">            if (b[0] == 1) {</span>
+<span class="nc" id="L129">                v = true;</span>
+<span class="nc bnc" id="L130" title="All 2 branches missed.">            } else if (b[0] == 0) {</span>
+<span class="nc" id="L131">                v = false;</span>
+            }
+<span class="nc bnc" id="L133" title="All 2 branches missed.">        } else if (phType == PhType.DATE) {</span>
+<span class="nc" id="L134">            v = new java.sql.Date(decodeLong(b, 0));</span>
+<span class="nc bnc" id="L135" title="All 2 branches missed.">        } else if (phType == PhType.TIME) {</span>
+<span class="nc" id="L136">            v = new java.sql.Time(decodeLong(b, 0));</span>
+<span class="nc bnc" id="L137" title="All 2 branches missed.">        } else if (phType == PhType.TIMESTAMP) {</span>
+<span class="nc" id="L138">            long millisDeserialized = decodeLong(b, 0);</span>
+<span class="nc" id="L139">            Timestamp ts = new Timestamp(millisDeserialized);</span>
+<span class="nc" id="L140">            int nanosDeserialized = decodeUnsignedInt(b, Bytes.SIZEOF_LONG);</span>
+<span class="nc bnc" id="L141" title="All 2 branches missed.">            ts.setNanos(nanosDeserialized &lt; 1000000 ? ts.getNanos() + nanosDeserialized : nanosDeserialized);</span>
+<span class="nc" id="L142">            v = ts;</span>
+<span class="nc bnc" id="L143" title="All 4 branches missed.">        } else if (phType == PhType.UNSIGNED_TIME || phType == PhType.UNSIGNED_DATE) {</span>
+<span class="nc" id="L144">            v = new Date(decodeUnsignedLong(b, 0));</span>
+<span class="nc bnc" id="L145" title="All 2 branches missed.">        } else if (phType == PhType.UNSIGNED_TIMESTAMP) {</span>
+<span class="nc" id="L146">            long millisDeserialized = decodeUnsignedLong(b, 0);</span>
+<span class="nc" id="L147">            Timestamp ts = new Timestamp(millisDeserialized);</span>
+<span class="nc" id="L148">            int nanosDeserialized = decodeUnsignedInt(b, Bytes.SIZEOF_LONG);</span>
+<span class="nc bnc" id="L149" title="All 2 branches missed.">            ts.setNanos(nanosDeserialized &lt; 1000000 ? ts.getNanos() + nanosDeserialized : nanosDeserialized);</span>
+<span class="nc" id="L150">            v = ts;</span>
+<span class="nc bnc" id="L151" title="All 2 branches missed.">        } else if (phType == PhType.VARBINARY) {</span>
+<span class="nc" id="L152">            v = b;</span>
+<span class="nc bnc" id="L153" title="All 4 branches missed.">        } else if (phType == PhType.VARCHAR || phType == PhType.DEFAULT) {</span>
+<span class="nc" id="L154">            v = Bytes.toString(b);</span>
+<span class="nc bnc" id="L155" title="All 2 branches missed.">        } else if (phType == PhType.DECIMAL) {</span>
+<span class="nc" id="L156">            v = decodeDecimal(b, 0, b.length);</span>
+        }
+
+<span class="nc" id="L159">        return v;</span>
+    }
+
+    private static int decodeInt(byte[] bytes, int o) {
+<span class="nc" id="L163">        checkForSufficientLength(bytes, o, Bytes.SIZEOF_INT);</span>
+        int v;
+<span class="nc" id="L165">        v = bytes[o] ^ 0x80; // Flip sign bit back</span>
+<span class="nc bnc" id="L166" title="All 2 branches missed.">        for (int i = 1; i &lt; Bytes.SIZEOF_INT; i++) {</span>
+<span class="nc" id="L167">            v = (v &lt;&lt; 8) + (bytes[o + i] &amp; 0xff);</span>
+        }
+<span class="nc" id="L169">        return v;</span>
+    }
+
+    private static int encodeInt(int v, byte[] b, int o) {
+<span class="nc" id="L173">        checkForSufficientLength(b, o, Bytes.SIZEOF_INT);</span>
+<span class="nc" id="L174">        b[o + 0] = (byte) ((v &gt;&gt; 24) ^ 0x80); // Flip sign bit so that INTEGER</span>
+                                              // is binary comparable
+<span class="nc" id="L176">        b[o + 1] = (byte) (v &gt;&gt; 16);</span>
+<span class="nc" id="L177">        b[o + 2] = (byte) (v &gt;&gt; 8);</span>
+<span class="nc" id="L178">        b[o + 3] = (byte) v;</span>
+<span class="nc" id="L179">        return Bytes.SIZEOF_INT;</span>
+    }
+
+    private static int decodeUnsignedInt(byte[] b, int o) {
+<span class="nc" id="L183">        checkForSufficientLength(b, o, Bytes.SIZEOF_INT);</span>
+
+<span class="nc" id="L185">        int v = Bytes.toInt(b, o);</span>
+<span class="nc bnc" id="L186" title="All 2 branches missed.">        if (v &lt; 0) {</span>
+<span class="nc" id="L187">            throw new RuntimeException();</span>
+        }
+<span class="nc" id="L189">        return v;</span>
+    }
+
+    private static int encodeUnsignedInt(int v, byte[] b, int o) {
+<span class="nc" id="L193">        checkForSufficientLength(b, o, Bytes.SIZEOF_INT);</span>
+<span class="nc bnc" id="L194" title="All 2 branches missed.">        if (v &lt; 0) {</span>
+<span class="nc" id="L195">            throw new RuntimeException();</span>
+        }
+<span class="nc" id="L197">        Bytes.putInt(b, o, v);</span>
+<span class="nc" id="L198">        return Bytes.SIZEOF_INT;</span>
+    }
+
+    private static long decodeLong(byte[] bytes, int o) {
+<span class="nc" id="L202">        checkForSufficientLength(bytes, o, Bytes.SIZEOF_LONG);</span>
+        long v;
+<span class="nc" id="L204">        byte b = bytes[o];</span>
+<span class="nc" id="L205">        v = b ^ 0x80; // Flip sign bit back</span>
+<span class="nc bnc" id="L206" title="All 2 branches missed.">        for (int i = 1; i &lt; Bytes.SIZEOF_LONG; i++) {</span>
+<span class="nc" id="L207">            b = bytes[o + i];</span>
+<span class="nc" id="L208">            v = (v &lt;&lt; 8) + (b &amp; 0xff);</span>
+        }
+<span class="nc" id="L210">        return v;</span>
+    }
+
+    private static int encodeLong(long v, byte[] b, int o) {
+<span class="nc" id="L214">        checkForSufficientLength(b, o, Bytes.SIZEOF_LONG);</span>
+<span class="nc" id="L215">        b[o + 0] = (byte) ((v &gt;&gt; 56) ^ 0x80); // Flip sign bit so that INTEGER</span>
+                                              // is binary comparable
+<span class="nc" id="L217">        b[o + 1] = (byte) (v &gt;&gt; 48);</span>
+<span class="nc" id="L218">        b[o + 2] = (byte) (v &gt;&gt; 40);</span>
+<span class="nc" id="L219">        b[o + 3] = (byte) (v &gt;&gt; 32);</span>
+<span class="nc" id="L220">        b[o + 4] = (byte) (v &gt;&gt; 24);</span>
+<span class="nc" id="L221">        b[o + 5] = (byte) (v &gt;&gt; 16);</span>
+<span class="nc" id="L222">        b[o + 6] = (byte) (v &gt;&gt; 8);</span>
+<span class="nc" id="L223">        b[o + 7] = (byte) v;</span>
+<span class="nc" id="L224">        return Bytes.SIZEOF_LONG;</span>
+    }
+
+    private static long decodeUnsignedLong(byte[] b, int o) {
+<span class="nc" id="L228">        checkForSufficientLength(b, o, Bytes.SIZEOF_LONG);</span>
+<span class="nc" id="L229">        long v = 0;</span>
+<span class="nc bnc" id="L230" title="All 2 branches missed.">        for (int i = o; i &lt; o + Bytes.SIZEOF_LONG; i++) {</span>
+<span class="nc" id="L231">            v &lt;&lt;= 8;</span>
+<span class="nc" id="L232">            v ^= b[i] &amp; 0xFF;</span>
+        }
+
+<span class="nc bnc" id="L235" title="All 2 branches missed.">        if (v &lt; 0) {</span>
+<span class="nc" id="L236">            throw new RuntimeException();</span>
+        }
+<span class="nc" id="L238">        return v;</span>
+    }
+
+    private static int encodeUnsignedLong(long v, byte[] b, int o) {
+<span class="nc" id="L242">        checkForSufficientLength(b, o, Bytes.SIZEOF_LONG);</span>
+<span class="nc bnc" id="L243" title="All 2 branches missed.">        if (v &lt; 0) {</span>
+<span class="nc" id="L244">            throw new RuntimeException();</span>
+        }
+<span class="nc" id="L246">        Bytes.putLong(b, o, v);</span>
+<span class="nc" id="L247">        return Bytes.SIZEOF_LONG;</span>
+    }
+
+    private static short decodeShort(byte[] b, int o) {
+<span class="nc" id="L251">        checkForSufficientLength(b, o, Bytes.SIZEOF_SHORT);</span>
+        int v;
+<span class="nc" id="L253">        v = b[o] ^ 0x80; // Flip sign bit back</span>
+<span class="nc bnc" id="L254" title="All 2 branches missed.">        for (int i = 1; i &lt; Bytes.SIZEOF_SHORT; i++) {</span>
+<span class="nc" id="L255">            v = (v &lt;&lt; 8) + (b[o + i] &amp; 0xff);</span>
+        }
+<span class="nc" id="L257">        return (short) v;</span>
+    }
+
+    private static int encodeShort(short v, byte[] b, int o) {
+<span class="nc" id="L261">        checkForSufficientLength(b, o, Bytes.SIZEOF_SHORT);</span>
+<span class="nc" id="L262">        b[o + 0] = (byte) ((v &gt;&gt; 8) ^ 0x80); // Flip sign bit so that Short is</span>
+                                             // binary comparable
+<span class="nc" id="L264">        b[o + 1] = (byte) v;</span>
+<span class="nc" id="L265">        return Bytes.SIZEOF_SHORT;</span>
+    }
+
+    private static short decodeUnsignedShort(byte[] b, int o) {
+<span class="nc" id="L269">        checkForSufficientLength(b, o, Bytes.SIZEOF_SHORT);</span>
+<span class="nc" id="L270">        short v = Bytes.toShort(b, o);</span>
+<span class="nc bnc" id="L271" title="All 2 branches missed.">        if (v &lt; 0) {</span>
+<span class="nc" id="L272">            throw new RuntimeException();</span>
+        }
+<span class="nc" id="L274">        return v;</span>
+    }
+
+    private static int encodeUnsignedShort(short v, byte[] b, int o) {
+<span class="nc" id="L278">        checkForSufficientLength(b, o, Bytes.SIZEOF_SHORT);</span>
+<span class="nc bnc" id="L279" title="All 2 branches missed.">        if (v &lt; 0) {</span>
+<span class="nc" id="L280">            throw new RuntimeException();</span>
+        }
+<span class="nc" id="L282">        Bytes.putShort(b, o, v);</span>
+<span class="nc" id="L283">        return Bytes.SIZEOF_SHORT;</span>
+    }
+
+    private static byte decodeByte(byte[] b, int o) {
+<span class="nc" id="L287">        checkForSufficientLength(b, o, Bytes.SIZEOF_BYTE);</span>
+        int v;
+<span class="nc" id="L289">        v = b[o] ^ 0x80; // Flip sign bit back</span>
+<span class="nc" id="L290">        return (byte) v;</span>
+    }
+
+    private static int encodeByte(byte v, byte[] b, int o) {
+<span class="nc" id="L294">        checkForSufficientLength(b, o, Bytes.SIZEOF_BYTE);</span>
+<span class="nc" id="L295">        b[o] = (byte) (v ^ 0x80); // Flip sign bit so that Short is binary</span>
+                                  // comparable
+<span class="nc" id="L297">        return Bytes.SIZEOF_BYTE;</span>
+    }
+
+    private static byte decodeUnsignedByte(byte[] b, int o) {
+<span class="nc" id="L301">        checkForSufficientLength(b, o, Bytes.SIZEOF_BYTE);</span>
+<span class="nc" id="L302">        byte v = b[o];</span>
+<span class="nc bnc" id="L303" title="All 2 branches missed.">        if (v &lt; 0) {</span>
+<span class="nc" id="L304">            throw new RuntimeException();</span>
+        }
+<span class="nc" id="L306">        return v;</span>
+    }
+
+    private static int encodeUnsignedByte(byte v, byte[] b, int o) {
+<span class="nc bnc" id="L310" title="All 2 branches missed.">        if (v &lt; 0) {</span>
+<span class="nc" id="L311">            throw new RuntimeException();</span>
+        }
+<span class="nc" id="L313">        Bytes.putByte(b, o, v);</span>
+<span class="nc" id="L314">        return Bytes.SIZEOF_BYTE;</span>
+    }
+
+    private static float decodeFloat(byte[] b, int o) {
+<span class="nc" id="L318">        checkForSufficientLength(b, o, Bytes.SIZEOF_INT);</span>
+        int value;
+<span class="nc" id="L320">        value = Bytes.toInt(b, o);</span>
+<span class="nc" id="L321">        value--;</span>
+<span class="nc" id="L322">        value ^= (~value &gt;&gt; Integer.SIZE - 1) | Integer.MIN_VALUE;</span>
+<span class="nc" id="L323">        return Float.intBitsToFloat(value);</span>
+    }
+
+    private static int encodeFloat(float v, byte[] b, int o) {
+<span class="nc" id="L327">        checkForSufficientLength(b, o, Bytes.SIZEOF_FLOAT);</span>
+<span class="nc" id="L328">        int i = Float.floatToIntBits(v);</span>
+<span class="nc" id="L329">        i = (i ^ ((i &gt;&gt; Integer.SIZE - 1) | Integer.MIN_VALUE)) + 1;</span>
+<span class="nc" id="L330">        Bytes.putInt(b, o, i);</span>
+<span class="nc" id="L331">        return Bytes.SIZEOF_FLOAT;</span>
+    }
+
+    private static float decodeUnsignedFloat(byte[] b, int o) {
+<span class="nc" id="L335">        checkForSufficientLength(b, o, Bytes.SIZEOF_FLOAT);</span>
+<span class="nc" id="L336">        float v = Bytes.toFloat(b, o);</span>
+<span class="nc bnc" id="L337" title="All 2 branches missed.">        if (v &lt; 0) {</span>
+<span class="nc" id="L338">            throw new RuntimeException();</span>
+        }
+<span class="nc" id="L340">        return v;</span>
+    }
+
+    private static int encodeUnsignedFloat(float v, byte[] b, int o) {
+<span class="nc" id="L344">        checkForSufficientLength(b, o, Bytes.SIZEOF_FLOAT);</span>
+<span class="nc bnc" id="L345" title="All 2 branches missed.">        if (v &lt; 0) {</span>
+<span class="nc" id="L346">            throw new RuntimeException();</span>
+        }
+<span class="nc" id="L348">        Bytes.putFloat(b, o, v);</span>
+<span class="nc" id="L349">        return Bytes.SIZEOF_FLOAT;</span>
+    }
+
+    private static double decodeDouble(byte[] bytes, int o) {
+<span class="nc" id="L353">        checkForSufficientLength(bytes, o, Bytes.SIZEOF_LONG);</span>
+        long l;
+<span class="nc" id="L355">        l = Bytes.toLong(bytes, o);</span>
+<span class="nc" id="L356">        l--;</span>
+<span class="nc" id="L357">        l ^= (~l &gt;&gt; Long.SIZE - 1) | Long.MIN_VALUE;</span>
+<span class="nc" id="L358">        return Double.longBitsToDouble(l);</span>
+    }
+
+    private static int encodeDouble(double v, byte[] b, int o) {
+<span class="nc" id="L362">        checkForSufficientLength(b, o, Bytes.SIZEOF_LONG);</span>
+<span class="nc" id="L363">        long l = Double.doubleToLongBits(v);</span>
+<span class="nc" id="L364">        l = (l ^ ((l &gt;&gt; Long.SIZE - 1) | Long.MIN_VALUE)) + 1;</span>
+<span class="nc" id="L365">        Bytes.putLong(b, o, l);</span>
+<span class="nc" id="L366">        return Bytes.SIZEOF_LONG;</span>
+    }
+
+    private static double decodeUnsignedDouble(byte[] b, int o) {
+<span class="nc" id="L370">        checkForSufficientLength(b, o, Bytes.SIZEOF_DOUBLE);</span>
+<span class="nc" id="L371">        double v = Bytes.toDouble(b, o);</span>
+<span class="nc bnc" id="L372" title="All 2 branches missed.">        if (v &lt; 0) {</span>
+<span class="nc" id="L373">            throw new RuntimeException();</span>
+        }
+<span class="nc" id="L375">        return v;</span>
+    }
+
+    private static int encodeUnsignedDouble(double v, byte[] b, int o) {
+<span class="nc" id="L379">        checkForSufficientLength(b, o, Bytes.SIZEOF_DOUBLE);</span>
+<span class="nc bnc" id="L380" title="All 2 branches missed.">        if (v &lt; 0) {</span>
+<span class="nc" id="L381">            throw new RuntimeException();</span>
+        }
+<span class="nc" id="L383">        Bytes.putDouble(b, o, v);</span>
+<span class="nc" id="L384">        return Bytes.SIZEOF_DOUBLE;</span>
+    }
+
+    private static int encodeDate(Object v, byte[] b, int o) {
+<span class="nc bnc" id="L388" title="All 2 branches missed.">        if (v instanceof Date) {</span>
+<span class="nc" id="L389">            encodeLong(((Date) v).getTime(), b, 0);</span>
+<span class="nc bnc" id="L390" title="All 2 branches missed.">        } else if (v instanceof String) {</span>
+<span class="nc" id="L391">            String dateStr = (String) v;</span>
+            Date date;
+            try {
+<span class="nc" id="L394">                date = Util.parseDate(dateStr);</span>
+<span class="nc bnc" id="L395" title="All 2 branches missed.">                if (date != null) {</span>
+<span class="nc" id="L396">                    encodeLong(date.getTime(), b, 0);</span>
+                }
+<span class="nc" id="L398">            } catch (Exception e) {</span>
+<span class="nc" id="L399">                throw new RuntimeException(e);</span>
+<span class="nc" id="L400">            }</span>
+        }
+<span class="nc" id="L402">        return Bytes.SIZEOF_LONG;</span>
+    }
+
+    private static int encodeTimestamp(Object v, byte[] b, int o) {
+<span class="nc bnc" id="L406" title="All 2 branches missed.">        if (v instanceof Timestamp) {</span>
+<span class="nc" id="L407">            Timestamp ts = (Timestamp) v;</span>
+<span class="nc" id="L408">            encodeLong(ts.getTime(), b, o);</span>
+<span class="nc" id="L409">            Bytes.putInt(b, Bytes.SIZEOF_LONG, ts.getNanos() % 1000000);</span>
+<span class="nc" id="L410">        } else {</span>
+<span class="nc" id="L411">            encodeDate(v, b, o);</span>
+        }
+<span class="nc" id="L413">        return Bytes.SIZEOF_LONG + Bytes.SIZEOF_INT;</span>
+    }
+
+    private static int encodeUnsignedDate(Object v, byte[] b, int o) {
+<span class="nc bnc" id="L417" title="All 2 branches missed.">        if (v instanceof Date) {</span>
+<span class="nc" id="L418">            encodeUnsignedLong(((Date) v).getTime(), b, 0);</span>
+<span class="nc bnc" id="L419" title="All 2 branches missed.">        } else if (v instanceof String) {</span>
+<span class="nc" id="L420">            String dateStr = (String) v;</span>
+            Date date;
+            try {
+<span class="nc" id="L423">                date = Util.parseDate(dateStr);</span>
+<span class="nc bnc" id="L424" title="All 2 branches missed.">                if (date != null) {</span>
+<span class="nc" id="L425">                    encodeUnsignedLong(date.getTime(), b, 0);</span>
+                }
+<span class="nc" id="L427">            } catch (Exception e) {</span>
+<span class="nc" id="L428">                throw new RuntimeException(e);</span>
+<span class="nc" id="L429">            }</span>
+        }
+<span class="nc" id="L431">        return Bytes.SIZEOF_LONG;</span>
+    }
+
+    private static int encodeUnsignedTimestamp(Object v, byte[] b, int o) {
+<span class="nc bnc" id="L435" title="All 2 branches missed.">        if (v instanceof Timestamp) {</span>
+<span class="nc" id="L436">            Timestamp ts = (Timestamp) v;</span>
+<span class="nc" id="L437">            encodeUnsignedLong(ts.getTime(), b, o);</span>
+<span class="nc" id="L438">            Bytes.putInt(b, Bytes.SIZEOF_LONG, ts.getNanos() % 1000000);</span>
+<span class="nc" id="L439">        } else {</span>
+<span class="nc" id="L440">            encodeUnsignedDate(v, b, o);</span>
+        }
+<span class="nc" id="L442">        return Bytes.SIZEOF_LONG + Bytes.SIZEOF_INT;</span>
+    }
+
+    private static byte[] encodeDecimal(Object object) {
+<span class="nc bnc" id="L446" title="All 2 branches missed.">        if (object == null) {</span>
+<span class="nc" id="L447">            return new byte[0];</span>
+        }
+<span class="nc" id="L449">        BigDecimal v = (BigDecimal) object;</span>
+<span class="nc" id="L450">        v = v.round(DEFAULT_MATH_CONTEXT).stripTrailingZeros();</span>
+<span class="nc" id="L451">        int len = getLength(v);</span>
+<span class="nc" id="L452">        byte[] result = new byte[Math.min(len, 21)];</span>
+<span class="nc" id="L453">        decimalToBytes(v, result, 0, len);</span>
+<span class="nc" id="L454">        return result;</span>
+    }
+
+    private static BigDecimal decodeDecimal(byte[] bytes, int offset, int length) {
+<span class="nc bnc" id="L458" title="All 4 branches missed.">        if (length == 1 &amp;&amp; bytes[offset] == ZERO_BYTE) {</span>
+<span class="nc" id="L459">            return BigDecimal.ZERO;</span>
+        }
+<span class="nc bnc" id="L461" title="All 2 branches missed.">        int signum = ((bytes[offset] &amp; 0x80) == 0) ? -1 : 1;</span>
+        int scale;
+        int index;
+        int digitOffset;
+<span class="nc" id="L465">        long multiplier = 100L;</span>
+<span class="nc" id="L466">        int begIndex = offset + 1;</span>
+<span class="nc bnc" id="L467" title="All 2 branches missed.">        if (signum == 1) {</span>
+<span class="nc" id="L468">            scale = (byte) (((bytes[offset] &amp; 0x7F) - 65) * -2);</span>
+<span class="nc" id="L469">            index = offset + length;</span>
+<span class="nc" id="L470">            digitOffset = POS_DIGIT_OFFSET;</span>
+        } else {
+<span class="nc" id="L472">            scale = (byte) ((~bytes[offset] - 65 - 128) * -2);</span>
+<span class="nc bnc" id="L473" title="All 2 branches missed.">            index = offset + length - (bytes[offset + length - 1] == NEG_TERMINAL_BYTE ? 1 : 0);</span>
+<span class="nc" id="L474">            digitOffset = -NEG_DIGIT_OFFSET;</span>
+        }
+<span class="nc" id="L476">        length = index - offset;</span>
+<span class="nc" id="L477">        long l = signum * bytes[--index] - digitOffset;</span>
+<span class="nc bnc" id="L478" title="All 2 branches missed.">        if (l % 10 == 0) { // trailing zero</span>
+<span class="nc" id="L479">            scale--; // drop trailing zero and compensate in the scale</span>
+<span class="nc" id="L480">            l /= 10;</span>
+<span class="nc" id="L481">            multiplier = 10;</span>
+        }
+        // Use long arithmetic for as long as we can
+<span class="nc bnc" id="L484" title="All 2 branches missed.">        while (index &gt; begIndex) {</span>
+<span class="nc bnc" id="L485" title="All 4 branches missed.">            if (l &gt;= MAX_LONG_FOR_DESERIALIZE || multiplier &gt;= Long.MAX_VALUE / 100) {</span>
+<span class="nc" id="L486">                multiplier = LongMath.divide(multiplier, 100L, RoundingMode.UNNECESSARY);</span>
+<span class="nc" id="L487">                break; // Exit loop early so we don't overflow our multiplier</span>
+            }
+<span class="nc" id="L489">            int digit100 = signum * bytes[--index] - digitOffset;</span>
+<span class="nc" id="L490">            l += digit100 * multiplier;</span>
+<span class="nc" id="L491">            multiplier = LongMath.checkedMultiply(multiplier, 100);</span>
+<span class="nc" id="L492">        }</span>
+
+        BigInteger bi;
+        // If still more digits, switch to BigInteger arithmetic
+<span class="nc bnc" id="L496" title="All 2 branches missed.">        if (index &gt; begIndex) {</span>
+<span class="nc" id="L497">            bi = BigInteger.valueOf(l);</span>
+<span class="nc" id="L498">            BigInteger biMultiplier = BigInteger.valueOf(multiplier).multiply(ONE_HUNDRED);</span>
+            do {
+<span class="nc" id="L500">                int digit100 = signum * bytes[--index] - digitOffset;</span>
+<span class="nc" id="L501">                bi = bi.add(biMultiplier.multiply(BigInteger.valueOf(digit100)));</span>
+<span class="nc" id="L502">                biMultiplier = biMultiplier.multiply(ONE_HUNDRED);</span>
+<span class="nc bnc" id="L503" title="All 2 branches missed.">            } while (index &gt; begIndex);</span>
+<span class="nc bnc" id="L504" title="All 2 branches missed.">            if (signum == -1) {</span>
+<span class="nc" id="L505">                bi = bi.negate();</span>
+            }
+<span class="nc" id="L507">        } else {</span>
+<span class="nc" id="L508">            bi = BigInteger.valueOf(l * signum);</span>
+        }
+        // Update the scale based on the precision
+<span class="nc" id="L511">        scale += (length - 2) * 2;</span>
+<span class="nc" id="L512">        BigDecimal v = new BigDecimal(bi, scale);</span>
+<span class="nc" id="L513">        return v;</span>
+    }
+
+    private static int getLength(BigDecimal v) {
+<span class="nc" id="L517">        int signum = v.signum();</span>
+<span class="nc bnc" id="L518" title="All 2 branches missed.">        if (signum == 0) { // Special case for zero</span>
+<span class="nc" id="L519">            return 1;</span>
+        }
+<span class="nc bnc" id="L521" title="All 4 branches missed.">        return (signum &lt; 0 ? 2 : 1) + (v.precision() + 1 + (v.scale() % 2 == 0 ? 0 : 1)) / 2;</span>
+    }
+
+    private static final int         MAX_PRECISION            = 38;
+<span class="nc" id="L525">    private static final MathContext DEFAULT_MATH_CONTEXT     = new MathContext(MAX_PRECISION, RoundingMode.HALF_UP);</span>
+<span class="nc" id="L526">    private static final Integer     MAX_BIG_DECIMAL_BYTES    = 21;</span>
+    private static final byte        ZERO_BYTE                = (byte) 0x80;
+    private static final byte        NEG_TERMINAL_BYTE        = (byte) 102;
+    private static final int         EXP_BYTE_OFFSET          = 65;
+    private static final int         POS_DIGIT_OFFSET         = 1;
+    private static final int         NEG_DIGIT_OFFSET         = 101;
+<span class="nc" id="L532">    private static final BigInteger  MAX_LONG                 = BigInteger.valueOf(Long.MAX_VALUE);</span>
+<span class="nc" id="L533">    private static final BigInteger  MIN_LONG                 = BigInteger.valueOf(Long.MIN_VALUE);</span>
+<span class="nc" id="L534">    private static final BigInteger  ONE_HUNDRED              = BigInteger.valueOf(100);</span>
+    private static final long        MAX_LONG_FOR_DESERIALIZE = Long.MAX_VALUE / 1000;
+
+    private static int decimalToBytes(BigDecimal v, byte[] result, final int offset, int length) {
+<span class="nc" id="L538">        int signum = v.signum();</span>
+<span class="nc bnc" id="L539" title="All 2 branches missed.">        if (signum == 0) {</span>
+<span class="nc" id="L540">            result[offset] = ZERO_BYTE;</span>
+<span class="nc" id="L541">            return 1;</span>
+        }
+<span class="nc" id="L543">        int index = offset + length;</span>
+<span class="nc" id="L544">        int scale = v.scale();</span>
+<span class="nc bnc" id="L545" title="All 2 branches missed.">        int expOffset = scale % 2 * (scale &lt; 0 ? -1 : 1);</span>
+        int multiplyBy;
+        BigInteger divideBy;
+<span class="nc bnc" id="L548" title="All 2 branches missed.">        if (expOffset == 0) {</span>
+<span class="nc" id="L549">            multiplyBy = 1;</span>
+<span class="nc" id="L550">            divideBy = ONE_HUNDRED;</span>
+        } else {
+<span class="nc" id="L552">            multiplyBy = 10;</span>
+<span class="nc" id="L553">            divideBy = BigInteger.TEN;</span>
+        }
+        // Normalize the scale based on what is necessary to end up with a base
+        // 100
+        // decimal (i.e. 10.123e3)
+        int digitOffset;
+        BigInteger compareAgainst;
+<span class="nc bnc" id="L560" title="All 2 branches missed.">        if (signum == 1) {</span>
+<span class="nc" id="L561">            digitOffset = POS_DIGIT_OFFSET;</span>
+<span class="nc" id="L562">            compareAgainst = MAX_LONG;</span>
+<span class="nc" id="L563">            scale -= (length - 2) * 2;</span>
+<span class="nc" id="L564">            result[offset] = (byte) ((-(scale + expOffset) / 2 + EXP_BYTE_OFFSET) | 0x80);</span>
+        } else {
+<span class="nc" id="L566">            digitOffset = NEG_DIGIT_OFFSET;</span>
+<span class="nc" id="L567">            compareAgainst = MIN_LONG;</span>
+            // Scale adjustment shouldn't include terminal byte in length
+<span class="nc" id="L569">            scale -= (length - 2 - 1) * 2;</span>
+<span class="nc" id="L570">            result[offset] = (byte) (~(-(scale + expOffset) / 2 + EXP_BYTE_OFFSET + 128) &amp; 0x7F);</span>
+<span class="nc bnc" id="L571" title="All 2 branches missed.">            if (length &lt;= MAX_BIG_DECIMAL_BYTES) {</span>
+<span class="nc" id="L572">                result[--index] = NEG_TERMINAL_BYTE;</span>
+            } else {
+                // Adjust length and offset down because we don't have enough
+                // room
+<span class="nc" id="L576">                length = MAX_BIG_DECIMAL_BYTES;</span>
+<span class="nc" id="L577">                index = offset + length;</span>
+            }
+        }
+<span class="nc" id="L580">        BigInteger bi = v.unscaledValue();</span>
+        // Use BigDecimal arithmetic until we can fit into a long
+<span class="nc bnc" id="L582" title="All 2 branches missed.">        while (bi.compareTo(compareAgainst) * signum &gt; 0) {</span>
+<span class="nc" id="L583">            BigInteger[] dandr = bi.divideAndRemainder(divideBy);</span>
+<span class="nc" id="L584">            bi = dandr[0];</span>
+<span class="nc" id="L585">            int digit = dandr[1].intValue();</span>
+<span class="nc" id="L586">            result[--index] = (byte) (digit * multiplyBy + digitOffset);</span>
+<span class="nc" id="L587">            multiplyBy = 1;</span>
+<span class="nc" id="L588">            divideBy = ONE_HUNDRED;</span>
+<span class="nc" id="L589">        }</span>
+<span class="nc" id="L590">        long l = bi.longValue();</span>
+        do {
+<span class="nc" id="L592">            long divBy = 100 / multiplyBy;</span>
+<span class="nc" id="L593">            long digit = l % divBy;</span>
+<span class="nc" id="L594">            l /= divBy;</span>
+<span class="nc" id="L595">            result[--index] = (byte) (digit * multiplyBy + digitOffset);</span>
+<span class="nc" id="L596">            multiplyBy = 1;</span>
+<span class="nc bnc" id="L597" title="All 2 branches missed.">        } while (l != 0);</span>
+
+<span class="nc" id="L599">        return length;</span>
+    }
+
+    private static void checkForSufficientLength(byte[] b, int offset, int requiredLength) {
+<span class="nc bnc" id="L603" title="All 2 branches missed.">        if (b.length &lt; offset + requiredLength) {</span>
+<span class="nc" id="L604">            throw new RuntimeException(</span>
+                &quot;Expected length of at least &quot; + requiredLength + &quot; bytes, but had &quot; + (b.length - offset));
+        }
+<span class="nc" id="L607">    }</span>
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.3.201901230119</span></div></body></html>

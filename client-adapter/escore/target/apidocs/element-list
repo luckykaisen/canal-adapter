@@ -1,0 +1,5 @@
+com.alibaba.otter.canal.client.adapter.es.core
+com.alibaba.otter.canal.client.adapter.es.core.config
+com.alibaba.otter.canal.client.adapter.es.core.monitor
+com.alibaba.otter.canal.client.adapter.es.core.service
+com.alibaba.otter.canal.client.adapter.es.core.support

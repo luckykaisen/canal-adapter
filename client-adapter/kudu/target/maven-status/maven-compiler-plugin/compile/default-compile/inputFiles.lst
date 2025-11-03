@@ -1,0 +1,8 @@
+/Users/kc/Downloads/canal-canal-1.1.8_new/client-adapter/kudu/src/main/java/com/alibaba/otter/canal/client/adapter/kudu/KuduAdapter.java
+/Users/kc/Downloads/canal-canal-1.1.8_new/client-adapter/kudu/src/main/java/com/alibaba/otter/canal/client/adapter/kudu/monitor/KuduConfigMonitor.java
+/Users/kc/Downloads/canal-canal-1.1.8_new/client-adapter/kudu/src/main/java/com/alibaba/otter/canal/client/adapter/kudu/service/KuduSyncService.java
+/Users/kc/Downloads/canal-canal-1.1.8_new/client-adapter/kudu/src/main/java/com/alibaba/otter/canal/client/adapter/kudu/config/KuduMappingConfigLoader.java
+/Users/kc/Downloads/canal-canal-1.1.8_new/client-adapter/kudu/src/main/java/com/alibaba/otter/canal/client/adapter/kudu/config/KuduMappingConfig.java
+/Users/kc/Downloads/canal-canal-1.1.8_new/client-adapter/kudu/src/main/java/com/alibaba/otter/canal/client/adapter/kudu/service/KuduEtlService.java
+/Users/kc/Downloads/canal-canal-1.1.8_new/client-adapter/kudu/src/main/java/com/alibaba/otter/canal/client/adapter/kudu/support/KuduTemplate.java
+/Users/kc/Downloads/canal-canal-1.1.8_new/client-adapter/kudu/src/main/java/com/alibaba/otter/canal/client/adapter/kudu/support/SyncUtil.java

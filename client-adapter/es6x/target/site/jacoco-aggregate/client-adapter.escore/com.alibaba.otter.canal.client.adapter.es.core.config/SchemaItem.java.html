@@ -1,0 +1,440 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>SchemaItem.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">canal client adapter es v6x module for otter 1.1.8</a> &gt; <a href="../index.html" class="el_bundle">client-adapter.escore</a> &gt; <a href="index.source.html" class="el_package">com.alibaba.otter.canal.client.adapter.es.core.config</a> &gt; <span class="el_source">SchemaItem.java</span></div><h1>SchemaItem.java</h1><pre class="source lang-java linenums">package com.alibaba.otter.canal.client.adapter.es.core.config;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+
+/**
+ * ES 映射配置视图
+ *
+ * @author rewerma 2018-11-01
+ * @version 1.0.0
+ */
+<span class="nc" id="L15">public class SchemaItem {</span>
+
+<span class="nc" id="L17">    private Map&lt;String, TableItem&gt;                aliasTableItems = new LinkedHashMap&lt;&gt;(); // 别名对应表名</span>
+<span class="nc" id="L18">    private Map&lt;String, FieldItem&gt;                selectFields    = new LinkedHashMap&lt;&gt;(); // 查询字段</span>
+    private String                                sql;
+
+    private volatile Map&lt;String, List&lt;TableItem&gt;&gt; tableItemAliases;
+    private volatile Map&lt;String, List&lt;FieldItem&gt;&gt; columnFields;
+    private volatile Boolean                      allFieldsSimple;
+
+    public void init() {
+<span class="nc" id="L26">        this.getTableItemAliases();</span>
+<span class="nc" id="L27">        this.getColumnFields();</span>
+<span class="nc" id="L28">        this.isAllFieldsSimple();</span>
+<span class="nc" id="L29">        aliasTableItems.values().forEach(tableItem -&gt; {</span>
+<span class="nc" id="L30">            tableItem.getRelationTableFields();</span>
+<span class="nc" id="L31">            tableItem.getRelationSelectFieldItems();</span>
+<span class="nc" id="L32">        });</span>
+<span class="nc" id="L33">    }</span>
+
+    public Map&lt;String, TableItem&gt; getAliasTableItems() {
+<span class="nc" id="L36">        return aliasTableItems;</span>
+    }
+
+    public void setAliasTableItems(Map&lt;String, TableItem&gt; aliasTableItems) {
+<span class="nc" id="L40">        this.aliasTableItems = aliasTableItems;</span>
+<span class="nc" id="L41">    }</span>
+
+    public String getSql() {
+<span class="nc" id="L44">        return sql;</span>
+    }
+
+    public void setSql(String sql) {
+<span class="nc" id="L48">        this.sql = sql;</span>
+<span class="nc" id="L49">    }</span>
+
+    public Map&lt;String, FieldItem&gt; getSelectFields() {
+<span class="nc" id="L52">        return selectFields;</span>
+    }
+
+    public void setSelectFields(Map&lt;String, FieldItem&gt; selectFields) {
+<span class="nc" id="L56">        this.selectFields = selectFields;</span>
+<span class="nc" id="L57">    }</span>
+
+    public String toSql() {
+        // todo
+<span class="nc" id="L61">        return null;</span>
+    }
+
+    public Map&lt;String, List&lt;TableItem&gt;&gt; getTableItemAliases() {
+<span class="nc bnc" id="L65" title="All 2 branches missed.">        if (tableItemAliases == null) {</span>
+<span class="nc" id="L66">            synchronized (SchemaItem.class) {</span>
+<span class="nc bnc" id="L67" title="All 2 branches missed.">                if (tableItemAliases == null) {</span>
+<span class="nc" id="L68">                    tableItemAliases = new LinkedHashMap&lt;&gt;();</span>
+<span class="nc" id="L69">                    aliasTableItems.forEach((alias, tableItem) -&gt; {</span>
+<span class="nc" id="L70">                        List&lt;TableItem&gt; aliases = tableItemAliases</span>
+<span class="nc" id="L71">                            .computeIfAbsent(tableItem.getTableName().toLowerCase(), k -&gt; new ArrayList&lt;&gt;());</span>
+<span class="nc" id="L72">                        aliases.add(tableItem);</span>
+<span class="nc" id="L73">                    });</span>
+                }
+<span class="nc" id="L75">            }</span>
+        }
+<span class="nc" id="L77">        return tableItemAliases;</span>
+    }
+
+    public Map&lt;String, List&lt;FieldItem&gt;&gt; getColumnFields() {
+<span class="nc bnc" id="L81" title="All 2 branches missed.">        if (columnFields == null) {</span>
+<span class="nc" id="L82">            synchronized (SchemaItem.class) {</span>
+<span class="nc bnc" id="L83" title="All 2 branches missed.">                if (columnFields == null) {</span>
+<span class="nc" id="L84">                    columnFields = new LinkedHashMap&lt;&gt;();</span>
+<span class="nc" id="L85">                    getSelectFields()</span>
+<span class="nc" id="L86">                        .forEach((fieldName, fieldItem) -&gt; fieldItem.getColumnItems().forEach(columnItem -&gt; {</span>
+                            // TableItem tableItem = getAliasTableItems().get(columnItem.getOwner());
+                            // if (!tableItem.isSubQuery()) {
+                            //当数据列并非原始列时，columnName是空的，例如concat('px',id)
+<span class="nc bnc" id="L90" title="All 2 branches missed.">                            if(columnItem.getColumnName() != null) {</span>
+<span class="nc" id="L91">                                List&lt;FieldItem&gt; fieldItems = columnFields.computeIfAbsent(</span>
+<span class="nc" id="L92">                                        columnItem.getOwner() + &quot;.&quot; + columnItem.getColumnName(),</span>
+<span class="nc" id="L93">                                        k -&gt; new ArrayList&lt;&gt;());</span>
+<span class="nc" id="L94">                                fieldItems.add(fieldItem);</span>
+                            }
+                            // } else {
+                            // tableItem.getSubQueryFields().forEach(subQueryField -&gt; {
+                            // List&lt;FieldItem&gt; fieldItems = columnFields.computeIfAbsent(
+                            // columnItem.getOwner() + &quot;.&quot; + subQueryField.getColumn().getColumnName(),
+                            // k -&gt; new ArrayList&lt;&gt;());
+                            // fieldItems.add(fieldItem);
+                            // });
+                            // }
+<span class="nc" id="L104">                        }));</span>
+                }
+<span class="nc" id="L106">            }</span>
+        }
+<span class="nc" id="L108">        return columnFields;</span>
+    }
+
+    public boolean isAllFieldsSimple() {
+<span class="nc bnc" id="L112" title="All 2 branches missed.">        if (allFieldsSimple == null) {</span>
+<span class="nc" id="L113">            synchronized (SchemaItem.class) {</span>
+<span class="nc bnc" id="L114" title="All 2 branches missed.">                if (allFieldsSimple == null) {</span>
+<span class="nc" id="L115">                    allFieldsSimple = true;</span>
+
+<span class="nc bnc" id="L117" title="All 2 branches missed.">                    for (FieldItem fieldItem : getSelectFields().values()) {</span>
+<span class="nc bnc" id="L118" title="All 4 branches missed.">                        if (fieldItem.isMethod() || fieldItem.isBinaryOp()) {</span>
+<span class="nc" id="L119">                            allFieldsSimple = false;</span>
+<span class="nc" id="L120">                            break;</span>
+                        }
+<span class="nc" id="L122">                    }</span>
+                }
+<span class="nc" id="L124">            }</span>
+        }
+
+<span class="nc" id="L127">        return allFieldsSimple;</span>
+    }
+
+    public TableItem getMainTable() {
+<span class="nc bnc" id="L131" title="All 2 branches missed.">        if (!aliasTableItems.isEmpty()) {</span>
+<span class="nc" id="L132">            return aliasTableItems.values().iterator().next();</span>
+        } else {
+<span class="nc" id="L134">            return null;</span>
+        }
+    }
+
+    public FieldItem getIdFieldItem(ESSyncConfig.ESMapping mapping) {
+<span class="nc bnc" id="L139" title="All 2 branches missed.">        if (mapping.getId() != null) {</span>
+<span class="nc" id="L140">            return getSelectFields().get(mapping.getId());</span>
+        } else {
+<span class="nc" id="L142">            return getSelectFields().get(mapping.getPk());</span>
+        }
+    }
+
+    public static class TableItem {
+
+        private SchemaItem                               schemaItem;
+
+        private String                                   schema;
+        private String                                   tableName;
+        private String                                   alias;
+        private String                                   subQuerySql;
+<span class="nc" id="L154">        private List&lt;FieldItem&gt;                          subQueryFields = new ArrayList&lt;&gt;();</span>
+<span class="nc" id="L155">        private List&lt;RelationFieldsPair&gt;                 relationFields = new ArrayList&lt;&gt;();</span>
+
+        private boolean                                  main;
+        private boolean                                  subQuery;
+
+        private volatile Map&lt;FieldItem, List&lt;FieldItem&gt;&gt; relationTableFields;               // 当前表关联条件字段对应主表查询字段
+        private volatile List&lt;FieldItem&gt;                 relationSelectFieldItems;          // 子表所在主表的查询字段
+
+<span class="nc" id="L163">        public TableItem(SchemaItem schemaItem){</span>
+<span class="nc" id="L164">            this.schemaItem = schemaItem;</span>
+<span class="nc" id="L165">        }</span>
+
+        public SchemaItem getSchemaItem() {
+<span class="nc" id="L168">            return schemaItem;</span>
+        }
+
+        public void setSchemaItem(SchemaItem schemaItem) {
+<span class="nc" id="L172">            this.schemaItem = schemaItem;</span>
+<span class="nc" id="L173">        }</span>
+
+        public String getSchema() {
+<span class="nc" id="L176">            return schema;</span>
+        }
+
+        public void setSchema(String schema) {
+<span class="nc" id="L180">            this.schema = schema;</span>
+<span class="nc" id="L181">        }</span>
+
+        public String getTableName() {
+<span class="nc" id="L184">            return tableName;</span>
+        }
+
+        public void setTableName(String tableName) {
+<span class="nc" id="L188">            this.tableName = tableName;</span>
+<span class="nc" id="L189">        }</span>
+
+        public String getAlias() {
+<span class="nc" id="L192">            return alias;</span>
+        }
+
+        public void setAlias(String alias) {
+<span class="nc" id="L196">            this.alias = alias;</span>
+<span class="nc" id="L197">        }</span>
+
+        public String getSubQuerySql() {
+<span class="nc" id="L200">            return subQuerySql;</span>
+        }
+
+        public void setSubQuerySql(String subQuerySql) {
+<span class="nc" id="L204">            this.subQuerySql = subQuerySql;</span>
+<span class="nc" id="L205">        }</span>
+
+        public boolean isMain() {
+<span class="nc" id="L208">            return main;</span>
+        }
+
+        public void setMain(boolean main) {
+<span class="nc" id="L212">            this.main = main;</span>
+<span class="nc" id="L213">        }</span>
+
+        public boolean isSubQuery() {
+<span class="nc" id="L216">            return subQuery;</span>
+        }
+
+        public void setSubQuery(boolean subQuery) {
+<span class="nc" id="L220">            this.subQuery = subQuery;</span>
+<span class="nc" id="L221">        }</span>
+
+        public List&lt;FieldItem&gt; getSubQueryFields() {
+<span class="nc" id="L224">            return subQueryFields;</span>
+        }
+
+        public void setSubQueryFields(List&lt;FieldItem&gt; subQueryFields) {
+<span class="nc" id="L228">            this.subQueryFields = subQueryFields;</span>
+<span class="nc" id="L229">        }</span>
+
+        public List&lt;RelationFieldsPair&gt; getRelationFields() {
+<span class="nc" id="L232">            return relationFields;</span>
+        }
+
+        public void setRelationFields(List&lt;RelationFieldsPair&gt; relationFields) {
+<span class="nc" id="L236">            this.relationFields = relationFields;</span>
+<span class="nc" id="L237">        }</span>
+
+        public Map&lt;FieldItem, List&lt;FieldItem&gt;&gt; getRelationTableFields() {
+<span class="nc bnc" id="L240" title="All 2 branches missed.">            if (relationTableFields == null) {</span>
+<span class="nc" id="L241">                synchronized (SchemaItem.class) {</span>
+<span class="nc bnc" id="L242" title="All 2 branches missed.">                    if (relationTableFields == null) {</span>
+<span class="nc" id="L243">                        relationTableFields = new LinkedHashMap&lt;&gt;();</span>
+
+<span class="nc" id="L245">                        getRelationFields().forEach(relationFieldsPair -&gt; {</span>
+<span class="nc" id="L246">                            FieldItem leftFieldItem = relationFieldsPair.getLeftFieldItem();</span>
+<span class="nc" id="L247">                            FieldItem rightFieldItem = relationFieldsPair.getRightFieldItem();</span>
+<span class="nc" id="L248">                            FieldItem currentTableRelField = null;</span>
+<span class="nc bnc" id="L249" title="All 2 branches missed.">                            if (getAlias().equals(leftFieldItem.getOwner())) {</span>
+<span class="nc" id="L250">                                currentTableRelField = leftFieldItem;</span>
+<span class="nc bnc" id="L251" title="All 2 branches missed.">                            } else if (getAlias().equals(rightFieldItem.getOwner())) {</span>
+<span class="nc" id="L252">                                currentTableRelField = rightFieldItem;</span>
+                            }
+
+<span class="nc bnc" id="L255" title="All 2 branches missed.">                            if (currentTableRelField != null) {</span>
+<span class="nc" id="L256">                                List&lt;FieldItem&gt; selectFieldItem = getSchemaItem().getColumnFields()</span>
+<span class="nc" id="L257">                                    .get(leftFieldItem.getOwner() + &quot;.&quot; + leftFieldItem.getColumn().getColumnName());</span>
+<span class="nc bnc" id="L258" title="All 4 branches missed.">                                if (selectFieldItem != null &amp;&amp; !selectFieldItem.isEmpty()) {</span>
+<span class="nc" id="L259">                                    relationTableFields.put(currentTableRelField, selectFieldItem);</span>
+                                } else {
+<span class="nc" id="L261">                                    selectFieldItem = getSchemaItem().getColumnFields()</span>
+<span class="nc" id="L262">                                        .get(rightFieldItem.getOwner() + &quot;.&quot;</span>
+<span class="nc" id="L263">                                             + rightFieldItem.getColumn().getColumnName());</span>
+<span class="nc bnc" id="L264" title="All 4 branches missed.">                                    if (selectFieldItem != null &amp;&amp; !selectFieldItem.isEmpty()) {</span>
+<span class="nc" id="L265">                                        relationTableFields.put(currentTableRelField, selectFieldItem);</span>
+                                    } else {
+<span class="nc" id="L267">                                        throw new UnsupportedOperationException(</span>
+                                            &quot;Relation condition column must in select columns.&quot;);
+                                    }
+                                }
+                            }
+<span class="nc" id="L272">                        });</span>
+                    }
+<span class="nc" id="L274">                }</span>
+            }
+<span class="nc" id="L276">            return relationTableFields;</span>
+        }
+
+        public List&lt;FieldItem&gt; getRelationSelectFieldItems() {
+<span class="nc bnc" id="L280" title="All 2 branches missed.">            if (relationSelectFieldItems == null) {</span>
+<span class="nc" id="L281">                synchronized (SchemaItem.class) {</span>
+<span class="nc bnc" id="L282" title="All 2 branches missed.">                    if (relationSelectFieldItems == null) {</span>
+<span class="nc" id="L283">                        List&lt;FieldItem&gt; relationSelectFieldItemsTmp = new ArrayList&lt;&gt;();</span>
+<span class="nc bnc" id="L284" title="All 2 branches missed.">                        for (FieldItem fieldItem : schemaItem.getSelectFields().values()) {</span>
+<span class="nc bnc" id="L285" title="All 2 branches missed.">                            if (fieldItem.getOwners().contains(getAlias())) {</span>
+<span class="nc" id="L286">                                relationSelectFieldItemsTmp.add(fieldItem);</span>
+                            }
+<span class="nc" id="L288">                        }</span>
+<span class="nc" id="L289">                        relationSelectFieldItems = relationSelectFieldItemsTmp;</span>
+                    }
+<span class="nc" id="L291">                }</span>
+            }
+<span class="nc" id="L293">            return relationSelectFieldItems;</span>
+        }
+    }
+
+    public static class RelationFieldsPair {
+
+        private FieldItem leftFieldItem;
+        private FieldItem rightFieldItem;
+
+<span class="nc" id="L302">        public RelationFieldsPair(FieldItem leftFieldItem, FieldItem rightFieldItem){</span>
+<span class="nc" id="L303">            this.leftFieldItem = leftFieldItem;</span>
+<span class="nc" id="L304">            this.rightFieldItem = rightFieldItem;</span>
+<span class="nc" id="L305">        }</span>
+
+        public FieldItem getLeftFieldItem() {
+<span class="nc" id="L308">            return leftFieldItem;</span>
+        }
+
+        public void setLeftFieldItem(FieldItem leftFieldItem) {
+<span class="nc" id="L312">            this.leftFieldItem = leftFieldItem;</span>
+<span class="nc" id="L313">        }</span>
+
+        public FieldItem getRightFieldItem() {
+<span class="nc" id="L316">            return rightFieldItem;</span>
+        }
+
+        public void setRightFieldItem(FieldItem rightFieldItem) {
+<span class="nc" id="L320">            this.rightFieldItem = rightFieldItem;</span>
+<span class="nc" id="L321">        }</span>
+    }
+
+<span class="nc" id="L324">    public static class FieldItem {</span>
+
+        private String           fieldName;
+        private String           expr;
+<span class="nc" id="L328">        private List&lt;ColumnItem&gt; columnItems = new ArrayList&lt;&gt;();</span>
+<span class="nc" id="L329">        private List&lt;String&gt;     owners      = new ArrayList&lt;&gt;();</span>
+
+        private boolean          method;
+        private boolean          binaryOp;
+
+        public String getFieldName() {
+<span class="nc" id="L335">            return fieldName;</span>
+        }
+
+        public void setFieldName(String fieldName) {
+<span class="nc" id="L339">            this.fieldName = fieldName;</span>
+<span class="nc" id="L340">        }</span>
+
+        public String getExpr() {
+<span class="nc" id="L343">            return expr;</span>
+        }
+
+        public void setExpr(String expr) {
+<span class="nc" id="L347">            this.expr = expr;</span>
+<span class="nc" id="L348">        }</span>
+
+        public List&lt;ColumnItem&gt; getColumnItems() {
+<span class="nc" id="L351">            return columnItems;</span>
+        }
+
+        public void setColumnItems(List&lt;ColumnItem&gt; columnItems) {
+<span class="nc" id="L355">            this.columnItems = columnItems;</span>
+<span class="nc" id="L356">        }</span>
+
+        public boolean isMethod() {
+<span class="nc" id="L359">            return method;</span>
+        }
+
+        public void setMethod(boolean method) {
+<span class="nc" id="L363">            this.method = method;</span>
+<span class="nc" id="L364">        }</span>
+
+        public boolean isBinaryOp() {
+<span class="nc" id="L367">            return binaryOp;</span>
+        }
+
+        public void setBinaryOp(boolean binaryOp) {
+<span class="nc" id="L371">            this.binaryOp = binaryOp;</span>
+<span class="nc" id="L372">        }</span>
+
+        public List&lt;String&gt; getOwners() {
+<span class="nc" id="L375">            return owners;</span>
+        }
+
+        public void setOwners(List&lt;String&gt; owners) {
+<span class="nc" id="L379">            this.owners = owners;</span>
+<span class="nc" id="L380">        }</span>
+
+        public void addColumn(ColumnItem columnItem) {
+<span class="nc" id="L383">            columnItems.add(columnItem);</span>
+<span class="nc" id="L384">        }</span>
+
+        public ColumnItem getColumn() {
+<span class="nc bnc" id="L387" title="All 2 branches missed.">            if (!columnItems.isEmpty()) {</span>
+<span class="nc" id="L388">                return columnItems.get(0);</span>
+            } else {
+<span class="nc" id="L390">                return null;</span>
+            }
+        }
+
+        public String getOwner() {
+<span class="nc bnc" id="L395" title="All 2 branches missed.">            if (!owners.isEmpty()) {</span>
+<span class="nc" id="L396">                return owners.get(0);</span>
+            } else {
+<span class="nc" id="L398">                return null;</span>
+            }
+        }
+
+        @Override
+        public boolean equals(Object o) {
+<span class="nc bnc" id="L404" title="All 2 branches missed.">            if (this == o) return true;</span>
+<span class="nc bnc" id="L405" title="All 4 branches missed.">            if (o == null || getClass() != o.getClass()) return false;</span>
+
+<span class="nc" id="L407">            FieldItem fieldItem = (FieldItem) o;</span>
+
+<span class="nc bnc" id="L409" title="All 4 branches missed.">            return fieldName != null ? fieldName.equals(fieldItem.fieldName) : fieldItem.fieldName == null;</span>
+        }
+
+        @Override
+        public int hashCode() {
+<span class="nc bnc" id="L414" title="All 2 branches missed.">            return fieldName != null ? fieldName.hashCode() : 0;</span>
+        }
+    }
+
+<span class="nc" id="L418">    public static class ColumnItem {</span>
+
+        private String owner;
+        private String columnName;
+
+        public String getOwner() {
+<span class="nc" id="L424">            return owner;</span>
+        }
+
+        public void setOwner(String owner) {
+<span class="nc" id="L428">            this.owner = owner;</span>
+<span class="nc" id="L429">        }</span>
+
+        public String getColumnName() {
+<span class="nc" id="L432">            return columnName;</span>
+        }
+
+        public void setColumnName(String columnName) {
+<span class="nc" id="L436">            this.columnName = columnName;</span>
+<span class="nc" id="L437">        }</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.3.201901230119</span></div></body></html>

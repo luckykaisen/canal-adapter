@@ -1,0 +1,353 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>TablestoreAdapter.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">canal client adapter launcher module for otter 1.1.8</a> &gt; <a href="../index.html" class="el_bundle">client-adapter.tablestore</a> &gt; <a href="index.source.html" class="el_package">com.alibaba.otter.canal.client.adapter.tablestore</a> &gt; <span class="el_source">TablestoreAdapter.java</span></div><h1>TablestoreAdapter.java</h1><pre class="source lang-java linenums">package com.alibaba.otter.canal.client.adapter.tablestore;
+
+
+import com.alibaba.otter.canal.client.adapter.support.FileName2KeyMapping;
+import com.alibaba.otter.canal.client.adapter.support.Util;
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.stream.Collectors;
+
+import com.alibaba.otter.canal.client.adapter.OuterAdapter;
+import com.alibaba.otter.canal.client.adapter.support.Dml;
+import com.alibaba.otter.canal.client.adapter.support.EtlResult;
+import com.alibaba.otter.canal.client.adapter.support.OuterAdapterConfig;
+import com.alibaba.otter.canal.client.adapter.support.SPI;
+import com.alibaba.otter.canal.client.adapter.tablestore.common.PropertyConstants;
+import com.alibaba.otter.canal.client.adapter.tablestore.config.ConfigLoader;
+import com.alibaba.otter.canal.client.adapter.tablestore.config.MappingConfig;
+import com.alibaba.otter.canal.client.adapter.tablestore.service.TablestoreEtlService;
+import com.alibaba.otter.canal.client.adapter.tablestore.service.TablestoreSyncService;
+import com.alicloud.openservices.tablestore.DefaultTableStoreWriter;
+import com.alicloud.openservices.tablestore.TableStoreWriter;
+import com.alicloud.openservices.tablestore.core.auth.DefaultCredentials;
+import com.alicloud.openservices.tablestore.core.auth.ServiceCredentials;
+import com.alicloud.openservices.tablestore.writer.WriterConfig;
+import com.alicloud.openservices.tablestore.writer.WriterResult;
+import com.alicloud.openservices.tablestore.writer.enums.BatchRequestType;
+import com.alicloud.openservices.tablestore.writer.enums.DispatchMode;
+import com.alicloud.openservices.tablestore.writer.enums.WriteMode;
+import com.alicloud.openservices.tablestore.writer.enums.WriterRetryStrategy;
+import org.apache.commons.lang.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.util.CollectionUtils;
+
+
+@SPI(&quot;tablestore&quot;)
+<span class="nc" id="L37">public class TablestoreAdapter implements OuterAdapter {</span>
+
+<span class="nc" id="L39">    private static final Logger logger              = LoggerFactory.getLogger(TablestoreAdapter.class);</span>
+
+<span class="nc" id="L41">    private Map&lt;String, MappingConfig&gt;              tablestoreMapping          = new ConcurrentHashMap&lt;&gt;();                // 文件名对应配置</span>
+
+<span class="nc" id="L43">    private Map&lt;String, Map&lt;String, MappingConfig&gt;&gt; mappingConfigCache  = new ConcurrentHashMap&lt;&gt;();</span>
+
+<span class="nc" id="L45">    private Map&lt;String, Map&lt;String, TableStoreWriter&gt;&gt; writerCache  = new ConcurrentHashMap&lt;&gt;();</span>
+
+    private TablestoreSyncService tablestoreSyncService;
+
+    private Properties                              envProperties;
+
+    private OuterAdapterConfig configuration;
+
+
+    @Override
+    public void init(OuterAdapterConfig configuration, Properties envProperties) {
+<span class="nc" id="L56">        this.envProperties = envProperties;</span>
+<span class="nc" id="L57">        this.configuration = configuration;</span>
+<span class="nc" id="L58">        Map&lt;String, MappingConfig&gt; tablestoreMappingTmp = ConfigLoader.load(envProperties);</span>
+        // 过滤不匹配的key的配置
+<span class="nc" id="L60">        tablestoreMappingTmp.forEach((key, config) -&gt; {</span>
+<span class="nc" id="L61">            addConfig(key, config);</span>
+<span class="nc" id="L62">        });</span>
+
+<span class="nc bnc" id="L64" title="All 2 branches missed.">        if (tablestoreMapping.isEmpty()) {</span>
+<span class="nc" id="L65">            throw new RuntimeException(&quot;No tablestore adapter found for config key: &quot; + configuration.getKey());</span>
+        }
+
+<span class="nc" id="L68">        tablestoreSyncService = new TablestoreSyncService();</span>
+<span class="nc" id="L69">    }</span>
+
+    /**
+     * 根据配置文件获得tablestorewriter的WriterConfig信息
+     * @param mappingConfig
+     * @return
+     */
+    private WriterConfig getWriterConfig(MappingConfig mappingConfig) {
+<span class="nc" id="L77">        WriterConfig config = new WriterConfig();</span>
+<span class="nc" id="L78">        MappingConfig.DbMapping mapping = mappingConfig.getDbMapping();</span>
+<span class="nc" id="L79">        config.setMaxBatchRowsCount(mapping.getCommitBatch());</span>
+<span class="nc" id="L80">        config.setConcurrency(mappingConfig.getThreads());</span>
+<span class="nc" id="L81">        config.setDispatchMode(DispatchMode.HASH_PRIMARY_KEY);</span>
+<span class="nc" id="L82">        config.setWriteMode(WriteMode.SEQUENTIAL);</span>
+<span class="nc" id="L83">        config.setBatchRequestType(BatchRequestType.BULK_IMPORT);</span>
+<span class="nc" id="L84">        config.setBucketCount(mappingConfig.getThreads());</span>
+<span class="nc" id="L85">        config.setWriterRetryStrategy(WriterRetryStrategy.CERTAIN_ERROR_CODE_NOT_RETRY);</span>
+<span class="nc" id="L86">        config.setAllowDuplicatedRowInBatchRequest(false);</span>
+<span class="nc" id="L87">        return config;</span>
+    }
+
+
+    @Override
+    public void sync(List&lt;Dml&gt; dmls) {
+<span class="nc bnc" id="L93" title="All 4 branches missed.">        if (dmls == null || dmls.isEmpty()) {</span>
+<span class="nc" id="L94">            return;</span>
+        }
+
+        try {
+<span class="nc" id="L98">            Set&lt;TableStoreWriter&gt; writerSet = new HashSet&lt;&gt;();</span>
+<span class="nc" id="L99">            List&lt;Future&lt;WriterResult&gt;&gt; futureList = new ArrayList&lt;&gt;();</span>
+<span class="nc bnc" id="L100" title="All 2 branches missed.">            for (Dml dml : dmls) {</span>
+<span class="nc" id="L101">                String destination = StringUtils.trimToEmpty(dml.getDestination());</span>
+<span class="nc" id="L102">                String groupId = StringUtils.trimToEmpty(dml.getGroupId());</span>
+<span class="nc" id="L103">                String database = dml.getDatabase();</span>
+<span class="nc" id="L104">                String table = dml.getTable();</span>
+                String key;
+<span class="nc bnc" id="L106" title="All 4 branches missed.">                if (envProperties != null &amp;&amp; !&quot;tcp&quot;.equalsIgnoreCase(envProperties.getProperty(&quot;canal.conf.mode&quot;))) {</span>
+<span class="nc" id="L107">                    key = destination + &quot;-&quot; + groupId + &quot;_&quot; + database + &quot;-&quot; + table;</span>
+                } else {
+<span class="nc" id="L109">                    key = destination + &quot;_&quot; + database + &quot;-&quot; + table;</span>
+                }
+<span class="nc" id="L111">                Map&lt;String, MappingConfig&gt; configMap = mappingConfigCache.get(key);</span>
+<span class="nc bnc" id="L112" title="All 2 branches missed.">                if (configMap == null) {</span>
+                    // 可能有dml中涉及到的表并没有出现在配置中，说明此类dml并不需要同步
+<span class="nc" id="L114">                    continue;</span>
+                }
+
+<span class="nc" id="L117">                Map&lt;String, TableStoreWriter&gt; writerMap = writerCache.get(key);</span>
+
+<span class="nc bnc" id="L119" title="All 2 branches missed.">                for (Map.Entry&lt;String, MappingConfig&gt; entry : configMap.entrySet()) {</span>
+<span class="nc" id="L120">                    TableStoreWriter w = writerMap.get(entry.getKey());</span>
+                    // 拿到所有future用于判定失败的记录
+<span class="nc" id="L122">                    Future&lt;WriterResult&gt; futureTemp = tablestoreSyncService.sync(entry.getValue(), dml, w);</span>
+<span class="nc bnc" id="L123" title="All 2 branches missed.">                    if (futureTemp != null) {</span>
+<span class="nc" id="L124">                        writerSet.add(w);</span>
+<span class="nc" id="L125">                        futureList.add(futureTemp);</span>
+                    }
+<span class="nc" id="L127">                }</span>
+<span class="nc" id="L128">            }</span>
+
+<span class="nc bnc" id="L130" title="All 2 branches missed.">            if (writerSet.isEmpty()) {</span>
+<span class="nc" id="L131">                return;</span>
+            }
+
+<span class="nc" id="L134">            writerSet.forEach(e -&gt; e.flush());</span>
+
+<span class="nc" id="L136">            List&lt;WriterResult.RowChangeStatus&gt; totalFailedRows = new ArrayList&lt;&gt;();</span>
+<span class="nc bnc" id="L137" title="All 2 branches missed.">            for (Future&lt;WriterResult&gt; future : futureList) {</span>
+                try {
+<span class="nc" id="L139">                    WriterResult result = future.get();</span>
+<span class="nc" id="L140">                    List&lt;WriterResult.RowChangeStatus&gt; failedRows = result.getFailedRows();</span>
+<span class="nc bnc" id="L141" title="All 2 branches missed.">                    if (!CollectionUtils.isEmpty(failedRows)) {</span>
+<span class="nc" id="L142">                        totalFailedRows.addAll(failedRows);</span>
+                    }
+<span class="nc" id="L144">                } catch (InterruptedException e) {</span>
+<span class="nc" id="L145">                    logger.info(&quot;InterruptedException&quot;, e);</span>
+<span class="nc" id="L146">                    Thread.currentThread().interrupt();</span>
+<span class="nc" id="L147">                } catch (ExecutionException e) {</span>
+<span class="nc" id="L148">                    throw new RuntimeException(e);</span>
+<span class="nc" id="L149">                }</span>
+<span class="nc" id="L150">            }</span>
+
+<span class="nc bnc" id="L152" title="All 2 branches missed.">            if (!CollectionUtils.isEmpty(totalFailedRows)) {</span>
+                // 认为有失败的请求
+<span class="nc" id="L154">                List&lt;String&gt; msgs = totalFailedRows.stream().map(e -&gt; buildErrorMsgForFailedRowChange(e)).collect(Collectors.toList());</span>
+<span class="nc" id="L155">                throw new RuntimeException(&quot;Failed rows:&quot; + org.springframework.util.StringUtils.collectionToDelimitedString(msgs, &quot;,&quot;, &quot;[&quot;, &quot;]&quot;));</span>
+            }
+
+<span class="nc" id="L158">        } catch (Exception e) {</span>
+<span class="nc" id="L159">            throw e;</span>
+<span class="nc" id="L160">        }</span>
+<span class="nc" id="L161">    }</span>
+
+    /**
+     * 组装失败记录的信息
+     * @param rowChangeStatus
+     * @return
+     */
+    public static String buildErrorMsgForFailedRowChange(WriterResult.RowChangeStatus rowChangeStatus) {
+<span class="nc" id="L169">        StringBuilder sb = new StringBuilder(&quot;{Exception:&quot;);</span>
+<span class="nc" id="L170">        sb.append(rowChangeStatus.getException().getMessage()).append(&quot;,Table:&quot;)</span>
+<span class="nc" id="L171">        .append(rowChangeStatus.getRowChange().getTableName()).append(&quot;,PrimaryKey:&quot;)</span>
+<span class="nc" id="L172">        .append(&quot;{&quot;).append(rowChangeStatus.getRowChange().getPrimaryKey().toString())</span>
+<span class="nc" id="L173">        .append(&quot;}}&quot;);</span>
+<span class="nc" id="L174">        return sb.toString();</span>
+    }
+
+
+    @Override
+    public EtlResult etl(String task, List&lt;String&gt; params) {
+<span class="nc" id="L180">        EtlResult etlResult = new EtlResult();</span>
+<span class="nc" id="L181">        MappingConfig config = tablestoreMapping.get(task);</span>
+<span class="nc bnc" id="L182" title="All 2 branches missed.">        if (config == null) {</span>
+<span class="nc" id="L183">            etlResult.setErrorMessage(&quot;can not find config for &quot; + task);</span>
+<span class="nc" id="L184">            etlResult.setSucceeded(false);</span>
+<span class="nc" id="L185">            return etlResult;</span>
+        }
+
+<span class="nc" id="L188">        TableStoreWriter writer = null;</span>
+        try {
+<span class="nc" id="L190">            writer = buildEtlWriter(configuration, config);</span>
+
+<span class="nc" id="L192">            TablestoreEtlService rdbEtlService = new TablestoreEtlService(writer, config);</span>
+<span class="nc" id="L193">            rdbEtlService.importData(params);</span>
+
+<span class="nc" id="L195">            etlResult.setSucceeded(true);</span>
+<span class="nc" id="L196">            return etlResult;</span>
+<span class="nc" id="L197">        } catch (Exception e) {</span>
+<span class="nc" id="L198">            logger.error(&quot;Error while etl for task &quot; + task, e);</span>
+<span class="nc" id="L199">            etlResult.setSucceeded(false);</span>
+<span class="nc" id="L200">            etlResult.setErrorMessage(e.getMessage());</span>
+<span class="nc" id="L201">            return etlResult;</span>
+        } finally {
+<span class="nc bnc" id="L203" title="All 2 branches missed.">            if (writer != null) {</span>
+<span class="nc" id="L204">                writer.close();</span>
+            }
+        }
+    }
+
+    /**
+     * 构造批量导入的writer
+     * @param configuration
+     * @param mappingConfig
+     * @return
+     */
+    private TableStoreWriter buildEtlWriter(OuterAdapterConfig configuration, MappingConfig mappingConfig) {
+<span class="nc" id="L216">        Map&lt;String, String&gt; properties = configuration.getProperties();</span>
+
+<span class="nc" id="L218">        ServiceCredentials credentials = new DefaultCredentials(</span>
+<span class="nc" id="L219">                properties.get(PropertyConstants.TABLESTORE_ACCESSSECRETID),</span>
+<span class="nc" id="L220">                properties.get(PropertyConstants.TABLESTORE_ACCESSSECRETKEY)</span>
+        );
+
+<span class="nc" id="L223">        WriterConfig config = getWriterConfig(mappingConfig);</span>
+<span class="nc" id="L224">        config.setBucketCount(3);</span>
+<span class="nc" id="L225">        config.setAllowDuplicatedRowInBatchRequest(true);</span>
+<span class="nc" id="L226">        config.setConcurrency(8);</span>
+<span class="nc" id="L227">        config.setWriteMode(WriteMode.PARALLEL);</span>
+
+<span class="nc" id="L229">        TableStoreWriter writer = new DefaultTableStoreWriter(</span>
+<span class="nc" id="L230">                properties.get(PropertyConstants.TABLESTORE_ENDPOINT),</span>
+                credentials,
+<span class="nc" id="L232">                properties.get(PropertyConstants.TABLESTORE_INSTANCENAME),</span>
+<span class="nc" id="L233">                mappingConfig.getDbMapping().getTargetTable(),</span>
+                config,
+                null
+        );
+<span class="nc" id="L237">        return writer;</span>
+    }
+
+
+    @Override
+    public Map&lt;String, Object&gt; count(String task) {
+<span class="nc" id="L243">        throw new RuntimeException(&quot;count is not supportted in tablestore&quot;);</span>
+    }
+
+
+    @Override
+    public String getDestination(String task) {
+<span class="nc" id="L249">        MappingConfig config = tablestoreMapping.get(task);</span>
+<span class="nc bnc" id="L250" title="All 2 branches missed.">        if (config != null) {</span>
+<span class="nc" id="L251">            return config.getDestination();</span>
+        }
+<span class="nc" id="L253">        return null;</span>
+    }
+
+    @Override
+    public void destroy() {
+<span class="nc bnc" id="L258" title="All 2 branches missed.">        if (tablestoreSyncService != null) {</span>
+<span class="nc" id="L259">            tablestoreSyncService.close();</span>
+        }
+
+<span class="nc bnc" id="L262" title="All 2 branches missed.">        if (writerCache != null) {</span>
+<span class="nc bnc" id="L263" title="All 2 branches missed.">            for (Map&lt;String, TableStoreWriter&gt; tmpMap : writerCache.values()) {</span>
+<span class="nc bnc" id="L264" title="All 2 branches missed.">                if (tmpMap != null) {</span>
+<span class="nc bnc" id="L265" title="All 2 branches missed.">                    for (TableStoreWriter writer : tmpMap.values()) {</span>
+<span class="nc" id="L266">                        writer.close();</span>
+<span class="nc" id="L267">                    }</span>
+                }
+<span class="nc" id="L269">            }</span>
+        }
+<span class="nc" id="L271">    }</span>
+
+    private void addSyncConfigToCache(String configName, MappingConfig mappingConfig) {
+<span class="nc" id="L274">        Map&lt;String, String&gt; properties = configuration.getProperties();</span>
+        String key;
+<span class="nc bnc" id="L276" title="All 4 branches missed.">        if (envProperties != null &amp;&amp; !&quot;tcp&quot;.equalsIgnoreCase(envProperties.getProperty(&quot;canal.conf.mode&quot;))) {</span>
+<span class="nc" id="L277">            key = StringUtils.trimToEmpty(mappingConfig.getDestination()) + &quot;-&quot;</span>
+<span class="nc" id="L278">                    + StringUtils.trimToEmpty(mappingConfig.getGroupId()) + &quot;_&quot;</span>
+<span class="nc" id="L279">                    + mappingConfig.getDbMapping().getDatabase() + &quot;-&quot; + mappingConfig.getDbMapping().getTable();</span>
+        } else {
+<span class="nc" id="L281">            key = StringUtils.trimToEmpty(mappingConfig.getDestination()) + &quot;_&quot;</span>
+<span class="nc" id="L282">                    + mappingConfig.getDbMapping().getDatabase() + &quot;-&quot; + mappingConfig.getDbMapping().getTable();</span>
+        }
+<span class="nc" id="L284">        Map&lt;String, MappingConfig&gt; configMap = mappingConfigCache.computeIfAbsent(key,</span>
+<span class="nc" id="L285">                k1 -&gt; new ConcurrentHashMap&lt;&gt;());</span>
+<span class="nc" id="L286">        configMap.put(configName, mappingConfig);</span>
+
+
+        // 构建对应的 TableStoreWriter
+<span class="nc" id="L290">        ServiceCredentials credentials = new DefaultCredentials(</span>
+<span class="nc" id="L291">                properties.get(PropertyConstants.TABLESTORE_ACCESSSECRETID),</span>
+<span class="nc" id="L292">                properties.get(PropertyConstants.TABLESTORE_ACCESSSECRETKEY)</span>
+        );
+
+
+<span class="nc" id="L296">        WriterConfig config = getWriterConfig(mappingConfig);</span>
+
+<span class="nc" id="L298">        TableStoreWriter writer = new DefaultTableStoreWriter(</span>
+<span class="nc" id="L299">                properties.get(PropertyConstants.TABLESTORE_ENDPOINT),</span>
+                credentials,
+<span class="nc" id="L301">                properties.get(PropertyConstants.TABLESTORE_INSTANCENAME),</span>
+<span class="nc" id="L302">                mappingConfig.getDbMapping().getTargetTable(),</span>
+                config,
+                null
+        );
+
+<span class="nc" id="L307">        Map&lt;String, TableStoreWriter&gt; config2writerMap = writerCache.computeIfAbsent(key,</span>
+<span class="nc" id="L308">                k1 -&gt; new ConcurrentHashMap&lt;&gt;());</span>
+<span class="nc" id="L309">        config2writerMap.put(configName, writer);</span>
+<span class="nc" id="L310">    }</span>
+
+    public boolean addConfig(String fileName, MappingConfig config) {
+<span class="nc bnc" id="L313" title="All 2 branches missed.">        if (match(config)) {</span>
+<span class="nc" id="L314">            tablestoreMapping.put(fileName, config);</span>
+<span class="nc" id="L315">            addSyncConfigToCache(fileName, config);</span>
+<span class="nc" id="L316">            FileName2KeyMapping.register(getClass().getAnnotation(SPI.class).value(), fileName,</span>
+<span class="nc" id="L317">                    configuration.getKey());</span>
+<span class="nc" id="L318">            return true;</span>
+        }
+<span class="nc" id="L320">        return false;</span>
+    }
+
+    public void updateConfig(String fileName, MappingConfig config) {
+<span class="nc bnc" id="L324" title="All 2 branches missed.">        if (config.getOuterAdapterKey() != null &amp;&amp; !config.getOuterAdapterKey()</span>
+<span class="nc bnc" id="L325" title="All 2 branches missed.">                .equals(configuration.getKey())) {</span>
+            // 理论上不允许改这个 因为本身就是通过这个关联起Adapter和Config的
+<span class="nc" id="L327">            throw new RuntimeException(&quot;not allow to change outAdapterKey&quot;);</span>
+        }
+<span class="nc" id="L329">        tablestoreMapping.put(fileName, config);</span>
+<span class="nc" id="L330">        addSyncConfigToCache(fileName, config);</span>
+<span class="nc" id="L331">    }</span>
+
+    public void deleteConfig(String fileName) {
+<span class="nc" id="L334">        tablestoreMapping.remove(fileName);</span>
+<span class="nc bnc" id="L335" title="All 2 branches missed.">        for (Map&lt;String, MappingConfig&gt; configMap : mappingConfigCache.values()) {</span>
+<span class="nc bnc" id="L336" title="All 2 branches missed.">            if (configMap != null) {</span>
+<span class="nc" id="L337">                configMap.remove(fileName);</span>
+            }
+<span class="nc" id="L339">        }</span>
+<span class="nc" id="L340">        FileName2KeyMapping.unregister(getClass().getAnnotation(SPI.class).value(), fileName);</span>
+<span class="nc" id="L341">    }</span>
+
+    private boolean match(MappingConfig config) {
+<span class="nc bnc" id="L344" title="All 2 branches missed.">        boolean sameMatch = config.getOuterAdapterKey() != null &amp;&amp; config.getOuterAdapterKey()</span>
+<span class="nc bnc" id="L345" title="All 2 branches missed.">                .equalsIgnoreCase(configuration.getKey());</span>
+<span class="nc bnc" id="L346" title="All 2 branches missed.">        boolean prefixMatch = config.getOuterAdapterKey() == null &amp;&amp; configuration.getKey()</span>
+<span class="nc bnc" id="L347" title="All 2 branches missed.">                .startsWith(StringUtils</span>
+<span class="nc" id="L348">                        .join(new String[]{Util.AUTO_GENERATED_PREFIX, config.getDestination(),</span>
+<span class="nc" id="L349">                                config.getGroupId()}, '-'));</span>
+<span class="nc bnc" id="L350" title="All 4 branches missed.">        return sameMatch || prefixMatch;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.3.201901230119</span></div></body></html>

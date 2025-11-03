@@ -1,0 +1,450 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>ESConnection.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">canal client adapter launcher module for otter 1.1.8</a> &gt; <a href="../index.html" class="el_bundle">client-adapter.es8x</a> &gt; <a href="index.source.html" class="el_package">com.alibaba.otter.canal.client.adapter.es8x.support</a> &gt; <span class="el_source">ESConnection.java</span></div><h1>ESConnection.java</h1><pre class="source lang-java linenums">package com.alibaba.otter.canal.client.adapter.es8x.support;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.UnknownHostException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.security.KeyStore;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateFactory;
+import java.util.Arrays;
+import java.util.Map;
+
+import javax.net.ssl.SSLContext;
+
+import org.apache.commons.lang.StringUtils;
+import org.apache.http.HttpHost;
+import org.apache.http.auth.AuthScope;
+import org.apache.http.auth.UsernamePasswordCredentials;
+import org.apache.http.client.CredentialsProvider;
+import org.apache.http.impl.client.BasicCredentialsProvider;
+import org.apache.http.ssl.SSLContextBuilder;
+import org.apache.http.ssl.SSLContexts;
+import org.elasticsearch.action.bulk.BulkItemResponse;
+import org.elasticsearch.action.bulk.BulkRequest;
+import org.elasticsearch.action.bulk.BulkRequestBuilder;
+import org.elasticsearch.action.bulk.BulkResponse;
+import org.elasticsearch.action.delete.DeleteRequest;
+import org.elasticsearch.action.delete.DeleteRequestBuilder;
+import org.elasticsearch.action.index.IndexRequest;
+import org.elasticsearch.action.index.IndexRequestBuilder;
+import org.elasticsearch.action.search.SearchRequest;
+import org.elasticsearch.action.search.SearchRequestBuilder;
+import org.elasticsearch.action.search.SearchResponse;
+import org.elasticsearch.action.update.UpdateRequest;
+import org.elasticsearch.action.update.UpdateRequestBuilder;
+import org.elasticsearch.client.*;
+import org.elasticsearch.client.indices.GetMappingsRequest;
+import org.elasticsearch.client.indices.GetMappingsResponse;
+import org.elasticsearch.cluster.metadata.MappingMetadata;
+import org.elasticsearch.index.query.QueryBuilder;
+import org.elasticsearch.rest.RestStatus;
+import org.elasticsearch.search.builder.SearchSourceBuilder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.alibaba.otter.canal.client.adapter.es.core.support.ESBulkRequest;
+
+/**
+ * ES 连接器, 只支持 Rest 方式
+ *
+ * @author ymz 2023-03-02
+ * @version 1.0.0
+ */
+public class ESConnection {
+
+<span class="nc" id="L60">    private static final Logger logger = LoggerFactory.getLogger(ESConnection.class);</span>
+
+    private RestHighLevelClient restHighLevelClient;
+
+<span class="nc" id="L64">    public ESConnection(String[] hosts, Map&lt;String, String&gt; properties) throws UnknownHostException{</span>
+<span class="nc" id="L65">        String caPath = properties.get(&quot;security.ca.path&quot;);</span>
+<span class="nc bnc" id="L66" title="All 2 branches missed.">        if (StringUtils.isNotEmpty(caPath)) {</span>
+<span class="nc" id="L67">            connectEsWithCa(hosts, properties, caPath);</span>
+        } else {
+<span class="nc" id="L69">            connectEsWithoutCa(hosts, properties);</span>
+        }
+<span class="nc" id="L71">    }</span>
+
+    private void connectEsWithCa(String[] hosts, Map&lt;String, String&gt; properties, String caPath) {
+<span class="nc" id="L74">        Path caCertificatePath = Paths.get(caPath);</span>
+<span class="nc" id="L75">        try (InputStream is = Files.newInputStream(caCertificatePath)) {</span>
+<span class="nc" id="L76">            CertificateFactory factory = CertificateFactory.getInstance(&quot;X.509&quot;);</span>
+<span class="nc" id="L77">            Certificate trustedCa = factory.generateCertificate(is);</span>
+<span class="nc" id="L78">            KeyStore trustStore = KeyStore.getInstance(&quot;pkcs12&quot;);</span>
+<span class="nc" id="L79">            trustStore.load(null, null);</span>
+<span class="nc" id="L80">            trustStore.setCertificateEntry(&quot;ca&quot;, trustedCa);</span>
+<span class="nc" id="L81">            SSLContextBuilder sslContextBuilder = SSLContexts.custom().loadTrustMaterial(trustStore, null);</span>
+<span class="nc" id="L82">            final SSLContext sslContext = sslContextBuilder.build();</span>
+
+<span class="nc" id="L84">            HttpHost[] httpHosts = Arrays.stream(hosts).map(this::createHttpHost).toArray(HttpHost[]::new);</span>
+<span class="nc" id="L85">            RestClientBuilder restClientBuilder = RestClient.builder(httpHosts);</span>
+<span class="nc" id="L86">            String nameAndPwd = properties.get(&quot;security.auth&quot;);</span>
+<span class="nc bnc" id="L87" title="All 4 branches missed.">            if (StringUtils.isNotEmpty(nameAndPwd) &amp;&amp; nameAndPwd.contains(&quot;:&quot;)) {</span>
+<span class="nc" id="L88">                String[] nameAndPwdArr = nameAndPwd.split(&quot;:&quot;);</span>
+<span class="nc" id="L89">                final CredentialsProvider credentialsProvider = new BasicCredentialsProvider();</span>
+<span class="nc" id="L90">                credentialsProvider.setCredentials(AuthScope.ANY,</span>
+                    new UsernamePasswordCredentials(nameAndPwdArr[0], nameAndPwdArr[1]));
+<span class="nc" id="L92">                restClientBuilder.setHttpClientConfigCallback(httpClientBuilder -&gt; {</span>
+<span class="nc" id="L93">                    httpClientBuilder.setDefaultCredentialsProvider(credentialsProvider);</span>
+<span class="nc" id="L94">                    return httpClientBuilder.setSSLContext(sslContext);</span>
+                });
+            }
+<span class="nc" id="L97">            restHighLevelClient = new RestHighLevelClientBuilder(restClientBuilder.build())</span>
+<span class="nc" id="L98">                .setApiCompatibilityMode(true)</span>
+<span class="nc" id="L99">                .build();</span>
+<span class="nc" id="L100">        } catch (Exception e) {</span>
+<span class="nc" id="L101">            throw new RuntimeException(e);</span>
+<span class="nc" id="L102">        }</span>
+<span class="nc" id="L103">    }</span>
+
+    private void connectEsWithoutCa(String[] hosts, Map&lt;String, String&gt; properties) {
+<span class="nc" id="L106">        HttpHost[] httpHosts = Arrays.stream(hosts).map(this::createHttpHost).toArray(HttpHost[]::new);</span>
+<span class="nc" id="L107">        RestClientBuilder restClientBuilder = RestClient.builder(httpHosts);</span>
+<span class="nc" id="L108">        String nameAndPwd = properties.get(&quot;security.auth&quot;);</span>
+<span class="nc bnc" id="L109" title="All 4 branches missed.">        if (StringUtils.isNotEmpty(nameAndPwd) &amp;&amp; nameAndPwd.contains(&quot;:&quot;)) {</span>
+<span class="nc" id="L110">            String[] nameAndPwdArr = nameAndPwd.split(&quot;:&quot;);</span>
+<span class="nc" id="L111">            final CredentialsProvider credentialsProvider = new BasicCredentialsProvider();</span>
+<span class="nc" id="L112">            credentialsProvider.setCredentials(AuthScope.ANY,</span>
+                new UsernamePasswordCredentials(nameAndPwdArr[0], nameAndPwdArr[1]));
+<span class="nc" id="L114">            restClientBuilder.setHttpClientConfigCallback(</span>
+<span class="nc" id="L115">                httpClientBuilder -&gt; httpClientBuilder.setDefaultCredentialsProvider(credentialsProvider));</span>
+        }
+<span class="nc" id="L117">        restHighLevelClient = new RestHighLevelClientBuilder(restClientBuilder.build()).setApiCompatibilityMode(true)</span>
+<span class="nc" id="L118">            .build();</span>
+<span class="nc" id="L119">    }</span>
+
+    public void close() {
+        try {
+<span class="nc" id="L123">            restHighLevelClient.close();</span>
+<span class="nc" id="L124">        } catch (IOException e) {</span>
+<span class="nc" id="L125">            throw new RuntimeException(e);</span>
+<span class="nc" id="L126">        }</span>
+<span class="nc" id="L127">    }</span>
+
+    public MappingMetadata getMapping(String index) {
+<span class="nc" id="L130">        MappingMetadata mappingMetaData = null;</span>
+
+        Map&lt;String, MappingMetadata&gt; mappings;
+        try {
+<span class="nc" id="L134">            GetMappingsRequest request = new GetMappingsRequest();</span>
+<span class="nc" id="L135">            request.indices(index);</span>
+<span class="nc" id="L136">            GetMappingsResponse response = restHighLevelClient.indices().getMapping(request, RequestOptions.DEFAULT);</span>
+
+<span class="nc" id="L138">            mappings = response.mappings();</span>
+<span class="nc" id="L139">        } catch (NullPointerException e) {</span>
+<span class="nc" id="L140">            throw new IllegalArgumentException(&quot;Not found the mapping info of index: &quot; + index);</span>
+<span class="nc" id="L141">        } catch (IOException e) {</span>
+<span class="nc" id="L142">            logger.error(e.getMessage(), e);</span>
+<span class="nc" id="L143">            return null;</span>
+<span class="nc" id="L144">        }</span>
+<span class="nc" id="L145">        mappingMetaData = mappings.get(index);</span>
+
+<span class="nc" id="L147">        return mappingMetaData;</span>
+    }
+
+    public class ES8xIndexRequest implements ESBulkRequest.ESIndexRequest {
+
+        private IndexRequestBuilder indexRequestBuilder;
+
+        private IndexRequest        indexRequest;
+
+<span class="nc" id="L156">        public ES8xIndexRequest(String index, String id){</span>
+<span class="nc" id="L157">            indexRequest = new IndexRequest(index);</span>
+<span class="nc" id="L158">            indexRequest.id(id);</span>
+
+<span class="nc" id="L160">        }</span>
+
+        public ES8xIndexRequest setSource(Map&lt;String, ?&gt; source) {
+
+<span class="nc" id="L164">            indexRequest.source(source);</span>
+
+<span class="nc" id="L166">            return this;</span>
+        }
+
+        public ES8xIndexRequest setRouting(String routing) {
+
+<span class="nc" id="L171">            indexRequest.routing(routing);</span>
+
+<span class="nc" id="L173">            return this;</span>
+        }
+
+        public IndexRequestBuilder getIndexRequestBuilder() {
+<span class="nc" id="L177">            return indexRequestBuilder;</span>
+        }
+
+        public void setIndexRequestBuilder(IndexRequestBuilder indexRequestBuilder) {
+<span class="nc" id="L181">            this.indexRequestBuilder = indexRequestBuilder;</span>
+<span class="nc" id="L182">        }</span>
+
+        public IndexRequest getIndexRequest() {
+<span class="nc" id="L185">            return indexRequest;</span>
+        }
+
+        public void setIndexRequest(IndexRequest indexRequest) {
+<span class="nc" id="L189">            this.indexRequest = indexRequest;</span>
+<span class="nc" id="L190">        }</span>
+    }
+
+    public class ES8xUpdateRequest implements ESBulkRequest.ESUpdateRequest {
+
+        private UpdateRequestBuilder updateRequestBuilder;
+
+        private UpdateRequest        updateRequest;
+
+<span class="nc" id="L199">        public ES8xUpdateRequest(String index, String id){</span>
+
+<span class="nc" id="L201">            updateRequest = new UpdateRequest(index, id);</span>
+<span class="nc" id="L202">        }</span>
+
+        public ES8xUpdateRequest setDoc(Map source) {
+
+<span class="nc" id="L206">            updateRequest.doc(source);</span>
+
+<span class="nc" id="L208">            return this;</span>
+        }
+
+        public ES8xUpdateRequest setDocAsUpsert(boolean shouldUpsertDoc) {
+
+<span class="nc" id="L213">            updateRequest.docAsUpsert(shouldUpsertDoc);</span>
+
+<span class="nc" id="L215">            return this;</span>
+        }
+
+        public ES8xUpdateRequest setRouting(String routing) {
+
+<span class="nc" id="L220">            updateRequest.routing(routing);</span>
+
+<span class="nc" id="L222">            return this;</span>
+        }
+
+        public UpdateRequestBuilder getUpdateRequestBuilder() {
+<span class="nc" id="L226">            return updateRequestBuilder;</span>
+        }
+
+        public void setUpdateRequestBuilder(UpdateRequestBuilder updateRequestBuilder) {
+<span class="nc" id="L230">            this.updateRequestBuilder = updateRequestBuilder;</span>
+<span class="nc" id="L231">        }</span>
+
+        public UpdateRequest getUpdateRequest() {
+<span class="nc" id="L234">            return updateRequest;</span>
+        }
+
+        public void setUpdateRequest(UpdateRequest updateRequest) {
+<span class="nc" id="L238">            this.updateRequest = updateRequest;</span>
+<span class="nc" id="L239">        }</span>
+    }
+
+    public class ES8xDeleteRequest implements ESBulkRequest.ESDeleteRequest {
+
+        private DeleteRequestBuilder deleteRequestBuilder;
+
+        private DeleteRequest        deleteRequest;
+
+<span class="nc" id="L248">        public ES8xDeleteRequest(String index, String id){</span>
+
+<span class="nc" id="L250">            deleteRequest = new DeleteRequest(index, id);</span>
+
+<span class="nc" id="L252">        }</span>
+
+        public DeleteRequestBuilder getDeleteRequestBuilder() {
+<span class="nc" id="L255">            return deleteRequestBuilder;</span>
+        }
+
+        public void setDeleteRequestBuilder(DeleteRequestBuilder deleteRequestBuilder) {
+<span class="nc" id="L259">            this.deleteRequestBuilder = deleteRequestBuilder;</span>
+<span class="nc" id="L260">        }</span>
+
+        public DeleteRequest getDeleteRequest() {
+<span class="nc" id="L263">            return deleteRequest;</span>
+        }
+
+        public void setDeleteRequest(DeleteRequest deleteRequest) {
+<span class="nc" id="L267">            this.deleteRequest = deleteRequest;</span>
+<span class="nc" id="L268">        }</span>
+    }
+
+    public class ESSearchRequest {
+
+        private SearchRequestBuilder searchRequestBuilder;
+
+        private SearchRequest        searchRequest;
+
+        private SearchSourceBuilder  sourceBuilder;
+
+<span class="nc" id="L279">        public ESSearchRequest(String index){</span>
+
+<span class="nc" id="L281">            searchRequest = new SearchRequest(index);</span>
+<span class="nc" id="L282">            sourceBuilder = new SearchSourceBuilder();</span>
+
+<span class="nc" id="L284">        }</span>
+
+        public ESSearchRequest setQuery(QueryBuilder queryBuilder) {
+
+<span class="nc" id="L288">            sourceBuilder.query(queryBuilder);</span>
+
+<span class="nc" id="L290">            return this;</span>
+        }
+
+        public ESSearchRequest size(int size) {
+
+<span class="nc" id="L295">            sourceBuilder.size(size);</span>
+
+<span class="nc" id="L297">            return this;</span>
+        }
+
+        public SearchResponse getResponse() {
+
+<span class="nc" id="L302">            searchRequest.source(sourceBuilder);</span>
+            try {
+<span class="nc" id="L304">                return restHighLevelClient.search(searchRequest, RequestOptions.DEFAULT);</span>
+<span class="nc" id="L305">            } catch (IOException e) {</span>
+<span class="nc" id="L306">                throw new RuntimeException(e);</span>
+            }
+
+        }
+
+        public SearchRequestBuilder getSearchRequestBuilder() {
+<span class="nc" id="L312">            return searchRequestBuilder;</span>
+        }
+
+        public void setSearchRequestBuilder(SearchRequestBuilder searchRequestBuilder) {
+<span class="nc" id="L316">            this.searchRequestBuilder = searchRequestBuilder;</span>
+<span class="nc" id="L317">        }</span>
+
+        public SearchRequest getSearchRequest() {
+<span class="nc" id="L320">            return searchRequest;</span>
+        }
+
+        public void setSearchRequest(SearchRequest searchRequest) {
+<span class="nc" id="L324">            this.searchRequest = searchRequest;</span>
+<span class="nc" id="L325">        }</span>
+    }
+
+    public class ES8xBulkRequest implements ESBulkRequest {
+
+        private BulkRequestBuilder bulkRequestBuilder;
+
+        private BulkRequest        bulkRequest;
+
+<span class="nc" id="L334">        public ES8xBulkRequest(){</span>
+<span class="nc" id="L335">            bulkRequest = new BulkRequest();</span>
+<span class="nc" id="L336">        }</span>
+
+        public void resetBulk() {
+
+<span class="nc" id="L340">            bulkRequest = new BulkRequest();</span>
+
+<span class="nc" id="L342">        }</span>
+
+        public ES8xBulkRequest add(ESIndexRequest esIndexRequest) {
+<span class="nc" id="L345">            ES8xIndexRequest eir = (ES8xIndexRequest) esIndexRequest;</span>
+
+<span class="nc" id="L347">            bulkRequest.add(eir.indexRequest);</span>
+
+<span class="nc" id="L349">            return this;</span>
+        }
+
+        public ES8xBulkRequest add(ESUpdateRequest esUpdateRequest) {
+<span class="nc" id="L353">            ES8xUpdateRequest eur = (ES8xUpdateRequest) esUpdateRequest;</span>
+
+<span class="nc" id="L355">            bulkRequest.add(eur.updateRequest);</span>
+
+<span class="nc" id="L357">            return this;</span>
+        }
+
+        public ES8xBulkRequest add(ESDeleteRequest esDeleteRequest) {
+<span class="nc" id="L361">            ES8xDeleteRequest edr = (ES8xDeleteRequest) esDeleteRequest;</span>
+
+<span class="nc" id="L363">            bulkRequest.add(edr.deleteRequest);</span>
+
+<span class="nc" id="L365">            return this;</span>
+        }
+
+        public int numberOfActions() {
+<span class="nc" id="L369">            return bulkRequest.numberOfActions();</span>
+        }
+
+        public ESBulkResponse bulk() {
+            try {
+<span class="nc" id="L374">                BulkResponse responses = restHighLevelClient.bulk(bulkRequest, RequestOptions.DEFAULT);</span>
+<span class="nc" id="L375">                return new ES8xBulkResponse(responses);</span>
+<span class="nc" id="L376">            } catch (IOException e) {</span>
+<span class="nc" id="L377">                throw new RuntimeException(e);</span>
+            }
+
+        }
+
+        public BulkRequestBuilder getBulkRequestBuilder() {
+<span class="nc" id="L383">            return bulkRequestBuilder;</span>
+        }
+
+        public void setBulkRequestBuilder(BulkRequestBuilder bulkRequestBuilder) {
+<span class="nc" id="L387">            this.bulkRequestBuilder = bulkRequestBuilder;</span>
+<span class="nc" id="L388">        }</span>
+
+        public BulkRequest getBulkRequest() {
+<span class="nc" id="L391">            return bulkRequest;</span>
+        }
+
+        public void setBulkRequest(BulkRequest bulkRequest) {
+<span class="nc" id="L395">            this.bulkRequest = bulkRequest;</span>
+<span class="nc" id="L396">        }</span>
+    }
+
+    public static class ES8xBulkResponse implements ESBulkRequest.ESBulkResponse {
+
+        private BulkResponse bulkResponse;
+
+<span class="nc" id="L403">        public ES8xBulkResponse(BulkResponse bulkResponse){</span>
+<span class="nc" id="L404">            this.bulkResponse = bulkResponse;</span>
+<span class="nc" id="L405">        }</span>
+
+        @Override
+        public boolean hasFailures() {
+<span class="nc" id="L409">            return bulkResponse.hasFailures();</span>
+        }
+
+        @Override
+        public void processFailBulkResponse(String errorMsg) {
+<span class="nc bnc" id="L414" title="All 2 branches missed.">            for (BulkItemResponse itemResponse : bulkResponse.getItems()) {</span>
+<span class="nc bnc" id="L415" title="All 2 branches missed.">                if (!itemResponse.isFailed()) {</span>
+<span class="nc" id="L416">                    continue;</span>
+                }
+
+<span class="nc bnc" id="L419" title="All 2 branches missed.">                if (itemResponse.getFailure().getStatus() == RestStatus.NOT_FOUND) {</span>
+<span class="nc" id="L420">                    logger.error(itemResponse.getFailureMessage());</span>
+                } else {
+<span class="nc" id="L422">                    throw new RuntimeException(errorMsg + itemResponse.getFailureMessage());</span>
+                }
+            }
+<span class="nc" id="L425">        }</span>
+    }
+
+    public RestHighLevelClient getRestHighLevelClient() {
+<span class="nc" id="L429">        return restHighLevelClient;</span>
+    }
+
+    public void setRestHighLevelClient(RestHighLevelClient restHighLevelClient) {
+<span class="nc" id="L433">        this.restHighLevelClient = restHighLevelClient;</span>
+<span class="nc" id="L434">    }</span>
+
+    private HttpHost createHttpHost(String uriStr) {
+<span class="nc" id="L437">        URI uri = URI.create(uriStr);</span>
+<span class="nc bnc" id="L438" title="All 2 branches missed.">        if (!org.springframework.util.StringUtils.hasLength(uri.getUserInfo())) {</span>
+<span class="nc" id="L439">            return HttpHost.create(uri.toString());</span>
+        }
+        try {
+<span class="nc" id="L442">            return HttpHost.create(new URI(uri</span>
+<span class="nc" id="L443">                .getScheme(), null, uri.getHost(), uri.getPort(), uri.getPath(), uri.getQuery(), uri.getFragment())</span>
+<span class="nc" id="L444">                    .toString());</span>
+<span class="nc" id="L445">        } catch (URISyntaxException ex) {</span>
+<span class="nc" id="L446">            throw new IllegalStateException(ex);</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.3.201901230119</span></div></body></html>

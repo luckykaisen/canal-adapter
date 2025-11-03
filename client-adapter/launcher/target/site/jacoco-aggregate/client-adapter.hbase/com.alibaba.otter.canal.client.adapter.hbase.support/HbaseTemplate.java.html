@@ -1,0 +1,192 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>HbaseTemplate.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">canal client adapter launcher module for otter 1.1.8</a> &gt; <a href="../index.html" class="el_bundle">client-adapter.hbase</a> &gt; <a href="index.source.html" class="el_package">com.alibaba.otter.canal.client.adapter.hbase.support</a> &gt; <span class="el_source">HbaseTemplate.java</span></div><h1>HbaseTemplate.java</h1><pre class="source lang-java linenums">package com.alibaba.otter.canal.client.adapter.hbase.support;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HColumnDescriptor;
+import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Connection;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
+import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.HTable;
+import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * HBase操作模板
+ *
+ * @author machengyuan 2018-8-21 下午10:12:34
+ * @version 1.0.0
+ */
+public class HbaseTemplate {
+
+<span class="nc" id="L30">    private Logger        logger = LoggerFactory.getLogger(this.getClass());</span>
+
+    private Configuration hbaseConfig;                                      // hbase配置对象
+    private Connection    conn;                                             // hbase连接
+
+<span class="nc" id="L35">    public HbaseTemplate(Configuration hbaseConfig){</span>
+<span class="nc" id="L36">        this.hbaseConfig = hbaseConfig;</span>
+<span class="nc" id="L37">        initConn();</span>
+<span class="nc" id="L38">    }</span>
+
+    private void initConn() {
+        try {
+<span class="nc" id="L42">            this.conn = ConnectionFactory.createConnection(hbaseConfig);</span>
+<span class="nc" id="L43">        } catch (IOException e) {</span>
+<span class="nc" id="L44">            throw new RuntimeException(e);</span>
+<span class="nc" id="L45">        }</span>
+<span class="nc" id="L46">    }</span>
+
+    public Connection getConnection() {
+<span class="nc bnc" id="L49" title="All 6 branches missed.">        if (conn == null || conn.isAborted() || conn.isClosed()) {</span>
+<span class="nc" id="L50">            initConn();</span>
+        }
+<span class="nc" id="L52">        return conn;</span>
+    }
+
+    public boolean tableExists(String tableName) {
+<span class="nc" id="L56">        try (HBaseAdmin admin = (HBaseAdmin) getConnection().getAdmin()) {</span>
+
+<span class="nc" id="L58">            return admin.tableExists(TableName.valueOf(tableName));</span>
+<span class="nc" id="L59">        } catch (IOException e) {</span>
+<span class="nc" id="L60">            throw new RuntimeException(e);</span>
+        }
+    }
+
+    public void createTable(String tableName, String... familyNames) {
+<span class="nc" id="L65">        try (HBaseAdmin admin = (HBaseAdmin) getConnection().getAdmin()) {</span>
+
+<span class="nc" id="L67">            HTableDescriptor desc = new HTableDescriptor(TableName.valueOf(tableName));</span>
+            // 添加列簇
+<span class="nc bnc" id="L69" title="All 2 branches missed.">            if (familyNames != null) {</span>
+<span class="nc bnc" id="L70" title="All 2 branches missed.">                for (String familyName : familyNames) {</span>
+<span class="nc" id="L71">                    HColumnDescriptor hcd = new HColumnDescriptor(familyName);</span>
+<span class="nc" id="L72">                    desc.addFamily(hcd);</span>
+                }
+            }
+<span class="nc" id="L75">            admin.createTable(desc);</span>
+<span class="nc" id="L76">        } catch (IOException e) {</span>
+<span class="nc" id="L77">            throw new RuntimeException(e);</span>
+<span class="nc" id="L78">        }</span>
+<span class="nc" id="L79">    }</span>
+
+    public void disableTable(String tableName) {
+<span class="nc" id="L82">        try (HBaseAdmin admin = (HBaseAdmin) getConnection().getAdmin()) {</span>
+<span class="nc" id="L83">            admin.disableTable(tableName);</span>
+<span class="nc" id="L84">        } catch (IOException e) {</span>
+<span class="nc" id="L85">            logger.error(e.getMessage(), e);</span>
+<span class="nc" id="L86">            throw new RuntimeException(e);</span>
+<span class="nc" id="L87">        }</span>
+<span class="nc" id="L88">    }</span>
+
+    public void deleteTable(String tableName) {
+<span class="nc" id="L91">        try (HBaseAdmin admin = (HBaseAdmin) getConnection().getAdmin()) {</span>
+<span class="nc bnc" id="L92" title="All 2 branches missed.">            if (admin.isTableEnabled(tableName)) {</span>
+<span class="nc" id="L93">                disableTable(tableName);</span>
+            }
+<span class="nc" id="L95">            admin.deleteTable(tableName);</span>
+<span class="nc" id="L96">        } catch (IOException e) {</span>
+<span class="nc" id="L97">            logger.error(e.getMessage(), e);</span>
+<span class="nc" id="L98">            throw new RuntimeException(e);</span>
+<span class="nc" id="L99">        }</span>
+<span class="nc" id="L100">    }</span>
+
+    /**
+     * 插入一行数据
+     *
+     * @param tableName 表名
+     * @param hRow 行数据对象
+     * @return 是否成功
+     */
+    public Boolean put(String tableName, HRow hRow) {
+<span class="nc" id="L110">        boolean flag = false;</span>
+        try {
+<span class="nc" id="L112">            HTable table = (HTable) getConnection().getTable(TableName.valueOf(tableName));</span>
+<span class="nc" id="L113">            Put put = new Put(hRow.getRowKey());</span>
+<span class="nc bnc" id="L114" title="All 2 branches missed.">            for (HRow.HCell hCell : hRow.getCells()) {</span>
+<span class="nc" id="L115">                put.addColumn(Bytes.toBytes(hCell.getFamily()), Bytes.toBytes(hCell.getQualifier()), hCell.getValue());</span>
+<span class="nc" id="L116">            }</span>
+<span class="nc" id="L117">            table.put(put);</span>
+<span class="nc" id="L118">            flag = true;</span>
+<span class="nc" id="L119">        } catch (Exception e) {</span>
+<span class="nc" id="L120">            logger.error(e.getMessage(), e);</span>
+<span class="nc" id="L121">            throw new RuntimeException(e);</span>
+<span class="nc" id="L122">        }</span>
+<span class="nc" id="L123">        return flag;</span>
+
+    }
+
+    /**
+     * 批量插入
+     *
+     * @param tableName 表名
+     * @param rows 行数据对象集合
+     * @return 是否成功
+     */
+    public Boolean puts(String tableName, List&lt;HRow&gt; rows) {
+<span class="nc" id="L135">        boolean flag = false;</span>
+        try {
+<span class="nc" id="L137">            HTable table = (HTable) getConnection().getTable(TableName.valueOf(tableName));</span>
+<span class="nc" id="L138">            List&lt;Put&gt; puts = new ArrayList&lt;&gt;();</span>
+<span class="nc bnc" id="L139" title="All 2 branches missed.">            for (HRow hRow : rows) {</span>
+<span class="nc" id="L140">                Put put = new Put(hRow.getRowKey());</span>
+<span class="nc bnc" id="L141" title="All 2 branches missed.">                for (HRow.HCell hCell : hRow.getCells()) {</span>
+<span class="nc" id="L142">                    put.addColumn(Bytes.toBytes(hCell.getFamily()),</span>
+<span class="nc" id="L143">                        Bytes.toBytes(hCell.getQualifier()),</span>
+<span class="nc" id="L144">                        hCell.getValue());</span>
+<span class="nc" id="L145">                }</span>
+<span class="nc" id="L146">                puts.add(put);</span>
+<span class="nc" id="L147">            }</span>
+<span class="nc bnc" id="L148" title="All 2 branches missed.">            if (!puts.isEmpty()) {</span>
+<span class="nc" id="L149">                table.put(puts);</span>
+            }
+<span class="nc" id="L151">            flag = true;</span>
+<span class="nc" id="L152">        } catch (Exception e) {</span>
+<span class="nc" id="L153">            logger.error(e.getMessage(), e);</span>
+<span class="nc" id="L154">            throw new RuntimeException(e);</span>
+<span class="nc" id="L155">        }</span>
+<span class="nc" id="L156">        return flag;</span>
+    }
+
+    /**
+     * 批量删除数据
+     *
+     * @param tableName 表名
+     * @param rowKeys rowKey集合
+     * @return 是否成功
+     */
+    public Boolean deletes(String tableName, Set&lt;byte[]&gt; rowKeys) {
+<span class="nc" id="L167">        boolean flag = false;</span>
+        try {
+<span class="nc" id="L169">            HTable table = (HTable) getConnection().getTable(TableName.valueOf(tableName));</span>
+<span class="nc" id="L170">            List&lt;Delete&gt; deletes = new ArrayList&lt;&gt;();</span>
+<span class="nc bnc" id="L171" title="All 2 branches missed.">            for (byte[] rowKey : rowKeys) {</span>
+<span class="nc" id="L172">                Delete delete = new Delete(rowKey);</span>
+<span class="nc" id="L173">                deletes.add(delete);</span>
+<span class="nc" id="L174">            }</span>
+<span class="nc bnc" id="L175" title="All 2 branches missed.">            if (!deletes.isEmpty()) {</span>
+<span class="nc" id="L176">                table.delete(deletes);</span>
+            }
+<span class="nc" id="L178">            flag = true;</span>
+<span class="nc" id="L179">        } catch (Exception e) {</span>
+<span class="nc" id="L180">            logger.error(e.getMessage(), e);</span>
+<span class="nc" id="L181">            throw new RuntimeException(e);</span>
+<span class="nc" id="L182">        }</span>
+<span class="nc" id="L183">        return flag;</span>
+    }
+
+    public void close() throws IOException {
+<span class="nc bnc" id="L187" title="All 2 branches missed.">        if (conn != null) {</span>
+<span class="nc" id="L188">            conn.close();</span>
+        }
+<span class="nc" id="L190">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.3.201901230119</span></div></body></html>

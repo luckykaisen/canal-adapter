@@ -1,0 +1,1 @@
+typeSearchIndex = [{"p":"com.alibaba.otter.canal.client.adapter.logger","l":"LoggerAdapterExample"},{"l":"所有类和接口","u":"allclasses-index.html"}];updateSearchResults();

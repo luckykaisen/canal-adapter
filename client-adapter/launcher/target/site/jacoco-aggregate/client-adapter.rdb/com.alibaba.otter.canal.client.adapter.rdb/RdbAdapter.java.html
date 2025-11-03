@@ -1,0 +1,346 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>RdbAdapter.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">canal client adapter launcher module for otter 1.1.8</a> &gt; <a href="../index.html" class="el_bundle">client-adapter.rdb</a> &gt; <a href="index.source.html" class="el_package">com.alibaba.otter.canal.client.adapter.rdb</a> &gt; <span class="el_source">RdbAdapter.java</span></div><h1>RdbAdapter.java</h1><pre class="source lang-java linenums">package com.alibaba.otter.canal.client.adapter.rdb;
+
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+
+import org.apache.commons.lang.BooleanUtils;
+import org.apache.commons.lang.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.alibaba.druid.filter.stat.StatFilter;
+import com.alibaba.druid.pool.DruidDataSource;
+import com.alibaba.druid.util.JdbcUtils;
+import com.alibaba.otter.canal.client.adapter.OuterAdapter;
+import com.alibaba.otter.canal.client.adapter.rdb.config.ConfigLoader;
+import com.alibaba.otter.canal.client.adapter.rdb.config.MappingConfig;
+import com.alibaba.otter.canal.client.adapter.rdb.config.MirrorDbConfig;
+import com.alibaba.otter.canal.client.adapter.rdb.monitor.RdbConfigMonitor;
+import com.alibaba.otter.canal.client.adapter.rdb.service.RdbEtlService;
+import com.alibaba.otter.canal.client.adapter.rdb.service.RdbMirrorDbSyncService;
+import com.alibaba.otter.canal.client.adapter.rdb.service.RdbSyncService;
+import com.alibaba.otter.canal.client.adapter.rdb.support.SyncUtil;
+import com.alibaba.otter.canal.client.adapter.support.*;
+
+/**
+ * RDB适配器实现类
+ *
+ * @author rewerma 2018-11-7 下午06:45:49
+ * @version 1.0.0
+ */
+@SPI(&quot;rdb&quot;)
+<span class="nc" id="L34">public class RdbAdapter implements OuterAdapter {</span>
+
+<span class="nc" id="L36">    private static Logger                           logger              = LoggerFactory.getLogger(RdbAdapter.class);</span>
+
+<span class="nc" id="L38">    private Map&lt;String, MappingConfig&gt;              rdbMapping          = new ConcurrentHashMap&lt;&gt;();                // 文件名对应配置</span>
+<span class="nc" id="L39">    private Map&lt;String, Map&lt;String, MappingConfig&gt;&gt; mappingConfigCache  = new ConcurrentHashMap&lt;&gt;();                // 库名-表名对应配置</span>
+<span class="nc" id="L40">    private Map&lt;String, MirrorDbConfig&gt;             mirrorDbConfigCache = new ConcurrentHashMap&lt;&gt;();                // 镜像库配置</span>
+
+    private DruidDataSource                         dataSource;
+
+    private RdbSyncService                          rdbSyncService;
+    private RdbMirrorDbSyncService                  rdbMirrorDbSyncService;
+
+    private RdbConfigMonitor                        rdbConfigMonitor;
+
+    private Properties                              envProperties;
+
+    private OuterAdapterConfig                      configuration;
+
+    public Map&lt;String, MappingConfig&gt; getRdbMapping() {
+<span class="nc" id="L54">        return rdbMapping;</span>
+    }
+
+    public Map&lt;String, Map&lt;String, MappingConfig&gt;&gt; getMappingConfigCache() {
+<span class="nc" id="L58">        return mappingConfigCache;</span>
+    }
+
+    public Map&lt;String, MirrorDbConfig&gt; getMirrorDbConfigCache() {
+<span class="nc" id="L62">        return mirrorDbConfigCache;</span>
+    }
+
+    /**
+     * 初始化方法
+     *
+     * @param configuration 外部适配器配置信息
+     */
+    @Override
+    public void init(OuterAdapterConfig configuration, Properties envProperties) {
+<span class="nc" id="L72">        this.envProperties = envProperties;</span>
+<span class="nc" id="L73">        this.configuration = configuration;</span>
+      
+        // 从jdbc url获取db类型
+<span class="nc" id="L76">        Map&lt;String, String&gt; properties = configuration.getProperties();</span>
+<span class="nc" id="L77">        String dbType = JdbcUtils.getDbType(properties.get(&quot;jdbc.url&quot;), null);</span>
+        // 当.yml文件编码格式存在问题，此处rdb yml文件构建 可能会抛出异常
+<span class="nc" id="L79">        Map&lt;String, MappingConfig&gt; rdbMappingTmp = ConfigLoader.load(envProperties);</span>
+        // 过滤不匹配的key的配置
+<span class="nc" id="L81">        rdbMappingTmp.forEach((key, config) -&gt; {</span>
+<span class="nc" id="L82">            addConfig(key, config);</span>
+<span class="nc" id="L83">        });</span>
+
+<span class="nc bnc" id="L85" title="All 2 branches missed.">        if (rdbMapping.isEmpty()) {</span>
+<span class="nc" id="L86">            throw new RuntimeException(&quot;No rdb adapter found for config key: &quot; + configuration.getKey());</span>
+        }
+
+        // 初始化连接池
+<span class="nc" id="L90">        dataSource = new DruidDataSource();</span>
+<span class="nc" id="L91">        dataSource.setDriverClassName(properties.get(&quot;jdbc.driverClassName&quot;));</span>
+<span class="nc" id="L92">        dataSource.setUrl(properties.get(&quot;jdbc.url&quot;));</span>
+<span class="nc" id="L93">        dataSource.setUsername(properties.get(&quot;jdbc.username&quot;));</span>
+<span class="nc" id="L94">        dataSource.setPassword(properties.get(&quot;jdbc.password&quot;));</span>
+<span class="nc" id="L95">        dataSource.setInitialSize(1);</span>
+<span class="nc" id="L96">        dataSource.setMinIdle(1);</span>
+<span class="nc" id="L97">        dataSource.setMaxActive(30);</span>
+<span class="nc" id="L98">        dataSource.setMaxWait(60000);</span>
+<span class="nc" id="L99">        dataSource.setTimeBetweenEvictionRunsMillis(60000);</span>
+<span class="nc" id="L100">        dataSource.setMinEvictableIdleTimeMillis(300000);</span>
+<span class="nc" id="L101">        dataSource.setUseUnfairLock(true);</span>
+<span class="nc" id="L102">        dataSource.setDbType(dbType);</span>
+<span class="nc" id="L103">        dataSource.setValidationQuery(&quot;select 1&quot;);</span>
+<span class="nc" id="L104">        dataSource.setLogAbandoned(true);</span>
+<span class="nc" id="L105">        dataSource.setRemoveAbandoned(true);</span>
+<span class="nc" id="L106">        dataSource.setRemoveAbandonedTimeoutMillis(300000);</span>
+
+        // List&lt;String&gt; array = new ArrayList&lt;&gt;();
+        // array.add(&quot;set names utf8mb4;&quot;);
+        // dataSource.setConnectionInitSqls(array);
+
+<span class="nc bnc" id="L112" title="All 2 branches missed.">        if (&quot;true&quot;.equals(properties.getOrDefault(&quot;druid.stat.enable&quot;, &quot;true&quot;))) {</span>
+<span class="nc" id="L113">            StatFilter statFilter = new StatFilter();</span>
+<span class="nc" id="L114">            statFilter.setSlowSqlMillis(Long.parseLong(properties.getOrDefault(&quot;druid.stat.slowSqlMillis&quot;, &quot;1000&quot;)));</span>
+<span class="nc" id="L115">            statFilter.setMergeSql(true);</span>
+<span class="nc" id="L116">            statFilter.setLogSlowSql(true);</span>
+<span class="nc" id="L117">            dataSource.setProxyFilters(Collections.singletonList(statFilter));</span>
+        }
+
+        try {
+<span class="nc" id="L121">            dataSource.init();</span>
+<span class="nc" id="L122">        } catch (SQLException e) {</span>
+<span class="nc" id="L123">            logger.error(&quot;ERROR ## failed to initial datasource: &quot; + properties.get(&quot;jdbc.url&quot;), e);</span>
+<span class="nc" id="L124">        }</span>
+
+<span class="nc" id="L126">        String threads = properties.get(&quot;threads&quot;);</span>
+        // String commitSize = properties.get(&quot;commitSize&quot;);
+
+<span class="nc" id="L129">        boolean skipDupException = BooleanUtils.toBoolean(configuration.getProperties()</span>
+<span class="nc" id="L130">            .getOrDefault(&quot;skipDupException&quot;, &quot;true&quot;));</span>
+<span class="nc" id="L131">        rdbSyncService = new RdbSyncService(dataSource,</span>
+<span class="nc bnc" id="L132" title="All 2 branches missed.">            threads != null ? Integer.valueOf(threads) : null,</span>
+            skipDupException);
+
+<span class="nc" id="L135">        rdbMirrorDbSyncService = new RdbMirrorDbSyncService(mirrorDbConfigCache,</span>
+            dataSource,
+<span class="nc bnc" id="L137" title="All 2 branches missed.">            threads != null ? Integer.valueOf(threads) : null,</span>
+<span class="nc" id="L138">            rdbSyncService.getColumnsTypeCache(),</span>
+            skipDupException);
+
+<span class="nc" id="L141">        rdbConfigMonitor = new RdbConfigMonitor();</span>
+<span class="nc" id="L142">        rdbConfigMonitor.init(configuration.getKey(), this, envProperties);</span>
+<span class="nc" id="L143">    }</span>
+
+    /**
+     * 同步方法
+     *
+     * @param dmls 数据包
+     */
+    @Override
+    public void sync(List&lt;Dml&gt; dmls) {
+<span class="nc bnc" id="L152" title="All 4 branches missed.">        if (dmls == null || dmls.isEmpty()) {</span>
+<span class="nc" id="L153">            return;</span>
+        }
+        try {
+<span class="nc bnc" id="L156" title="All 2 branches missed.">            if (!mappingConfigCache.isEmpty()) {</span>
+<span class="nc" id="L157">                rdbSyncService.sync(mappingConfigCache, dmls, envProperties);</span>
+            }
+<span class="nc" id="L159">            rdbMirrorDbSyncService.sync(dmls);</span>
+<span class="nc" id="L160">        } catch (Exception e) {</span>
+<span class="nc" id="L161">            throw new RuntimeException(e);</span>
+<span class="nc" id="L162">        }</span>
+<span class="nc" id="L163">    }</span>
+
+    /**
+     * ETL方法
+     *
+     * @param task 任务名, 对应配置名
+     * @param params etl筛选条件
+     * @return ETL结果
+     */
+    @Override
+    public EtlResult etl(String task, List&lt;String&gt; params) {
+<span class="nc" id="L174">        EtlResult etlResult = new EtlResult();</span>
+<span class="nc" id="L175">        MappingConfig config = rdbMapping.get(task);</span>
+<span class="nc" id="L176">        RdbEtlService rdbEtlService = new RdbEtlService(dataSource, config);</span>
+<span class="nc bnc" id="L177" title="All 2 branches missed.">        if (config != null) {</span>
+<span class="nc" id="L178">            return rdbEtlService.importData(params);</span>
+        } else {
+<span class="nc" id="L180">            StringBuilder resultMsg = new StringBuilder();</span>
+<span class="nc" id="L181">            boolean resSucc = true;</span>
+<span class="nc bnc" id="L182" title="All 2 branches missed.">            for (MappingConfig configTmp : rdbMapping.values()) {</span>
+                // 取所有的destination为task的配置
+<span class="nc bnc" id="L184" title="All 2 branches missed.">                if (configTmp.getDestination().equals(task)) {</span>
+<span class="nc" id="L185">                    EtlResult etlRes = rdbEtlService.importData(params);</span>
+<span class="nc bnc" id="L186" title="All 2 branches missed.">                    if (!etlRes.getSucceeded()) {</span>
+<span class="nc" id="L187">                        resSucc = false;</span>
+<span class="nc" id="L188">                        resultMsg.append(etlRes.getErrorMessage()).append(&quot;\n&quot;);</span>
+                    } else {
+<span class="nc" id="L190">                        resultMsg.append(etlRes.getResultMessage()).append(&quot;\n&quot;);</span>
+                    }
+                }
+<span class="nc" id="L193">            }</span>
+<span class="nc bnc" id="L194" title="All 2 branches missed.">            if (resultMsg.length() &gt; 0) {</span>
+<span class="nc" id="L195">                etlResult.setSucceeded(resSucc);</span>
+<span class="nc bnc" id="L196" title="All 2 branches missed.">                if (resSucc) {</span>
+<span class="nc" id="L197">                    etlResult.setResultMessage(resultMsg.toString());</span>
+                } else {
+<span class="nc" id="L199">                    etlResult.setErrorMessage(resultMsg.toString());</span>
+                }
+<span class="nc" id="L201">                return etlResult;</span>
+            }
+        }
+<span class="nc" id="L204">        etlResult.setSucceeded(false);</span>
+<span class="nc" id="L205">        etlResult.setErrorMessage(&quot;Task not found&quot;);</span>
+<span class="nc" id="L206">        return etlResult;</span>
+    }
+
+    /**
+     * 获取总数方法
+     *
+     * @param task 任务名, 对应配置名
+     * @return 总数
+     */
+    @Override
+    public Map&lt;String, Object&gt; count(String task) {
+<span class="nc" id="L217">        MappingConfig config = rdbMapping.get(task);</span>
+<span class="nc" id="L218">        MappingConfig.DbMapping dbMapping = config.getDbMapping();</span>
+<span class="nc" id="L219">        String sql = &quot;SELECT COUNT(1) AS cnt FROM &quot; + SyncUtil.getDbTableName(dbMapping, dataSource.getDbType());</span>
+<span class="nc" id="L220">        Connection conn = null;</span>
+<span class="nc" id="L221">        Map&lt;String, Object&gt; res = new LinkedHashMap&lt;&gt;();</span>
+        try {
+<span class="nc" id="L223">            conn = dataSource.getConnection();</span>
+<span class="nc" id="L224">            Util.sqlRS(conn, sql, rs -&gt; {</span>
+                try {
+<span class="nc bnc" id="L226" title="All 2 branches missed.">                    if (rs.next()) {</span>
+<span class="nc" id="L227">                        Long rowCount = rs.getLong(&quot;cnt&quot;);</span>
+<span class="nc" id="L228">                        res.put(&quot;count&quot;, rowCount);</span>
+                    }
+<span class="nc" id="L230">                } catch (SQLException e) {</span>
+<span class="nc" id="L231">                    logger.error(e.getMessage(), e);</span>
+<span class="nc" id="L232">                }</span>
+<span class="nc" id="L233">            });</span>
+<span class="nc" id="L234">        } catch (SQLException e) {</span>
+<span class="nc" id="L235">            logger.error(e.getMessage(), e);</span>
+        } finally {
+<span class="nc bnc" id="L237" title="All 2 branches missed.">            if (conn != null) {</span>
+                try {
+<span class="nc" id="L239">                    conn.close();</span>
+<span class="nc" id="L240">                } catch (SQLException e) {</span>
+<span class="nc" id="L241">                    logger.error(e.getMessage(), e);</span>
+<span class="nc" id="L242">                }</span>
+            }
+        }
+<span class="nc" id="L245">        res.put(&quot;targetTable&quot;, SyncUtil.getDbTableName(dbMapping, dataSource.getDbType()));</span>
+
+<span class="nc" id="L247">        return res;</span>
+    }
+
+    /**
+     * 获取对应canal instance name 或 mq topic
+     *
+     * @param task 任务名, 对应配置名
+     * @return destination
+     */
+    @Override
+    public String getDestination(String task) {
+<span class="nc" id="L258">        MappingConfig config = rdbMapping.get(task);</span>
+<span class="nc bnc" id="L259" title="All 2 branches missed.">        if (config != null) {</span>
+<span class="nc" id="L260">            return config.getDestination();</span>
+        }
+<span class="nc" id="L262">        return null;</span>
+    }
+
+    /**
+     * 销毁方法
+     */
+    @Override
+    public void destroy() {
+<span class="nc bnc" id="L270" title="All 2 branches missed.">        if (rdbConfigMonitor != null) {</span>
+<span class="nc" id="L271">            rdbConfigMonitor.destroy();</span>
+        }
+
+<span class="nc bnc" id="L274" title="All 2 branches missed.">        if (rdbSyncService != null) {</span>
+<span class="nc" id="L275">            rdbSyncService.close();</span>
+        }
+
+<span class="nc bnc" id="L278" title="All 2 branches missed.">        if (dataSource != null) {</span>
+<span class="nc" id="L279">            dataSource.close();</span>
+        }
+<span class="nc" id="L281">    }</span>
+
+    private void addSyncConfigToCache(String configName, MappingConfig mappingConfig) {
+<span class="nc bnc" id="L284" title="All 2 branches missed.">        if (!mappingConfig.getDbMapping().getMirrorDb()) {</span>
+            String key;
+<span class="nc bnc" id="L286" title="All 4 branches missed.">            if (envProperties != null &amp;&amp; !&quot;tcp&quot;.equalsIgnoreCase(envProperties.getProperty(&quot;canal.conf.mode&quot;))) {</span>
+<span class="nc" id="L287">                key = StringUtils.trimToEmpty(mappingConfig.getDestination()) + &quot;-&quot;</span>
+<span class="nc" id="L288">                        + StringUtils.trimToEmpty(mappingConfig.getGroupId()) + &quot;_&quot;</span>
+<span class="nc" id="L289">                        + mappingConfig.getDbMapping().getDatabase() + &quot;-&quot; + mappingConfig.getDbMapping().getTable();</span>
+            } else {
+<span class="nc" id="L291">                key = StringUtils.trimToEmpty(mappingConfig.getDestination()) + &quot;_&quot;</span>
+<span class="nc" id="L292">                        + mappingConfig.getDbMapping().getDatabase() + &quot;-&quot; + mappingConfig.getDbMapping().getTable();</span>
+            }
+<span class="nc" id="L294">            Map&lt;String, MappingConfig&gt; configMap = mappingConfigCache.computeIfAbsent(key,</span>
+<span class="nc" id="L295">                    k1 -&gt; new ConcurrentHashMap&lt;&gt;());</span>
+<span class="nc" id="L296">            configMap.put(configName, mappingConfig);</span>
+<span class="nc" id="L297">        } else {</span>
+            // mirrorDB
+<span class="nc" id="L299">            String key = StringUtils.trimToEmpty(mappingConfig.getDestination()) + &quot;.&quot;</span>
+<span class="nc" id="L300">                    + mappingConfig.getDbMapping().getDatabase();</span>
+<span class="nc" id="L301">            mirrorDbConfigCache.put(key, MirrorDbConfig.create(configName, mappingConfig));</span>
+        }
+<span class="nc" id="L303">    }</span>
+
+    public boolean addConfig(String fileName, MappingConfig config) {
+<span class="nc bnc" id="L306" title="All 2 branches missed.">        if (match(config)) {</span>
+<span class="nc" id="L307">            rdbMapping.put(fileName, config);</span>
+<span class="nc" id="L308">            addSyncConfigToCache(fileName, config);</span>
+<span class="nc" id="L309">            FileName2KeyMapping.register(getClass().getAnnotation(SPI.class).value(), fileName,</span>
+<span class="nc" id="L310">                    configuration.getKey());</span>
+<span class="nc" id="L311">            return true;</span>
+        }
+<span class="nc" id="L313">        return false;</span>
+    }
+
+    public void updateConfig(String fileName, MappingConfig config) {
+<span class="nc bnc" id="L317" title="All 2 branches missed.">        if (config.getOuterAdapterKey() != null &amp;&amp; !config.getOuterAdapterKey()</span>
+<span class="nc bnc" id="L318" title="All 2 branches missed.">                .equals(configuration.getKey())) {</span>
+            // 理论上不允许改这个 因为本身就是通过这个关联起Adapter和Config的
+<span class="nc" id="L320">            throw new RuntimeException(&quot;not allow to change outAdapterKey&quot;);</span>
+        }
+<span class="nc" id="L322">        rdbMapping.put(fileName, config);</span>
+<span class="nc" id="L323">        addSyncConfigToCache(fileName, config);</span>
+<span class="nc" id="L324">    }</span>
+
+    public void deleteConfig(String fileName) {
+<span class="nc" id="L327">        rdbMapping.remove(fileName);</span>
+<span class="nc bnc" id="L328" title="All 2 branches missed.">        for (Map&lt;String, MappingConfig&gt; configMap : mappingConfigCache.values()) {</span>
+<span class="nc bnc" id="L329" title="All 2 branches missed.">            if (configMap != null) {</span>
+<span class="nc" id="L330">                configMap.remove(fileName);</span>
+            }
+<span class="nc" id="L332">        }</span>
+<span class="nc" id="L333">        FileName2KeyMapping.unregister(getClass().getAnnotation(SPI.class).value(), fileName);</span>
+<span class="nc" id="L334">    }</span>
+
+    private boolean match(MappingConfig config) {
+<span class="nc bnc" id="L337" title="All 2 branches missed.">        boolean sameMatch = config.getOuterAdapterKey() != null &amp;&amp; config.getOuterAdapterKey()</span>
+<span class="nc bnc" id="L338" title="All 2 branches missed.">                .equalsIgnoreCase(configuration.getKey());</span>
+<span class="nc bnc" id="L339" title="All 2 branches missed.">        boolean prefixMatch = config.getOuterAdapterKey() == null &amp;&amp; configuration.getKey()</span>
+<span class="nc bnc" id="L340" title="All 2 branches missed.">                .startsWith(StringUtils</span>
+<span class="nc" id="L341">                        .join(new String[]{Util.AUTO_GENERATED_PREFIX, config.getDestination(),</span>
+<span class="nc" id="L342">                                config.getGroupId()}, '-'));</span>
+<span class="nc bnc" id="L343" title="All 4 branches missed.">        return sameMatch || prefixMatch;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.3.201901230119</span></div></body></html>

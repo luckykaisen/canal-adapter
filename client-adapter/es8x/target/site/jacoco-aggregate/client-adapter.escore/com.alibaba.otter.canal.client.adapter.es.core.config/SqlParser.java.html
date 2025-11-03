@@ -1,0 +1,287 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>SqlParser.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">canal client adapter es v8x module for otter 1.1.8</a> &gt; <a href="../index.html" class="el_bundle">client-adapter.escore</a> &gt; <a href="index.source.html" class="el_package">com.alibaba.otter.canal.client.adapter.es.core.config</a> &gt; <span class="el_source">SqlParser.java</span></div><h1>SqlParser.java</h1><pre class="source lang-java linenums">package com.alibaba.otter.canal.client.adapter.es.core.config;
+
+import static com.alibaba.druid.sql.ast.expr.SQLBinaryOperator.BooleanAnd;
+import static com.alibaba.druid.sql.ast.expr.SQLBinaryOperator.Equality;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
+
+import com.alibaba.druid.sql.SQLUtils;
+import com.alibaba.druid.sql.ast.SQLExpr;
+import com.alibaba.druid.sql.ast.expr.SQLBinaryOpExpr;
+import com.alibaba.druid.sql.ast.expr.SQLCaseExpr;
+import com.alibaba.druid.sql.ast.expr.SQLCharExpr;
+import com.alibaba.druid.sql.ast.expr.SQLIdentifierExpr;
+import com.alibaba.druid.sql.ast.expr.SQLMethodInvokeExpr;
+import com.alibaba.druid.sql.ast.expr.SQLPropertyExpr;
+import com.alibaba.druid.sql.ast.statement.SQLExprTableSource;
+import com.alibaba.druid.sql.ast.statement.SQLJoinTableSource;
+import com.alibaba.druid.sql.ast.statement.SQLSelectGroupByClause;
+import com.alibaba.druid.sql.ast.statement.SQLSelectItem;
+import com.alibaba.druid.sql.ast.statement.SQLSelectStatement;
+import com.alibaba.druid.sql.ast.statement.SQLSubqueryTableSource;
+import com.alibaba.druid.sql.ast.statement.SQLTableSource;
+import com.alibaba.druid.sql.dialect.mysql.ast.statement.MySqlSelectQueryBlock;
+import com.alibaba.druid.sql.dialect.mysql.parser.MySqlStatementParser;
+import com.alibaba.druid.sql.parser.ParserException;
+import com.alibaba.druid.sql.parser.SQLStatementParser;
+import com.alibaba.otter.canal.client.adapter.es.core.config.SchemaItem.ColumnItem;
+import com.alibaba.otter.canal.client.adapter.es.core.config.SchemaItem.FieldItem;
+import com.alibaba.otter.canal.client.adapter.es.core.config.SchemaItem.RelationFieldsPair;
+import com.alibaba.otter.canal.client.adapter.es.core.config.SchemaItem.TableItem;
+
+/**
+ * ES同步指定sql格式解析
+ *
+ * @author rewerma 2018-10-26 下午03:45:49
+ * @version 1.0.0
+ */
+<span class="nc" id="L40">public class SqlParser {</span>
+
+    /**
+     * 解析sql
+     *
+     * @param sql sql
+     * @return 视图对象
+     */
+    public static SchemaItem parse(String sql) {
+        try {
+<span class="nc" id="L50">            SQLStatementParser parser = new MySqlStatementParser(sql);</span>
+<span class="nc" id="L51">            SQLSelectStatement statement = (SQLSelectStatement) parser.parseStatement();</span>
+<span class="nc" id="L52">            MySqlSelectQueryBlock sqlSelectQueryBlock = (MySqlSelectQueryBlock) statement.getSelect().getQuery();</span>
+
+<span class="nc" id="L54">            SchemaItem schemaItem = new SchemaItem();</span>
+<span class="nc" id="L55">            schemaItem.setSql(SQLUtils.toMySqlString(sqlSelectQueryBlock));</span>
+<span class="nc" id="L56">            SQLTableSource sqlTableSource = sqlSelectQueryBlock.getFrom();</span>
+<span class="nc" id="L57">            List&lt;TableItem&gt; tableItems = new ArrayList&lt;&gt;();</span>
+<span class="nc" id="L58">            SqlParser.visitSelectTable(schemaItem, sqlTableSource, tableItems, null);</span>
+<span class="nc" id="L59">            tableItems.forEach(tableItem -&gt; schemaItem.getAliasTableItems().put(tableItem.getAlias(), tableItem));</span>
+
+<span class="nc" id="L61">            List&lt;FieldItem&gt; fieldItems = collectSelectQueryFields(sqlSelectQueryBlock);</span>
+<span class="nc" id="L62">            fieldItems.forEach(fieldItem -&gt; schemaItem.getSelectFields().put(fieldItem.getFieldName(), fieldItem));</span>
+
+<span class="nc" id="L64">            schemaItem.init();</span>
+
+<span class="nc bnc" id="L66" title="All 4 branches missed.">            if (schemaItem.getAliasTableItems().isEmpty() || schemaItem.getSelectFields().isEmpty()) {</span>
+<span class="nc" id="L67">                throw new ParserException(&quot;Parse sql error&quot;);</span>
+            }
+<span class="nc" id="L69">            return schemaItem;</span>
+<span class="nc" id="L70">        } catch (Exception e) {</span>
+<span class="nc" id="L71">            throw new ParserException();</span>
+        }
+    }
+
+    /**
+     * 归集字段
+     *
+     * @param sqlSelectQueryBlock sqlSelectQueryBlock
+     * @return 字段属性列表
+     */
+    private static List&lt;FieldItem&gt; collectSelectQueryFields(MySqlSelectQueryBlock sqlSelectQueryBlock) {
+<span class="nc" id="L82">        return sqlSelectQueryBlock.getSelectList().stream().map(selectItem -&gt; {</span>
+<span class="nc" id="L83">            FieldItem fieldItem = new FieldItem();</span>
+<span class="nc" id="L84">            fieldItem.setFieldName(selectItem.getAlias());</span>
+<span class="nc" id="L85">            fieldItem.setExpr(selectItem.toString());</span>
+<span class="nc" id="L86">            visitColumn(selectItem.getExpr(), fieldItem);</span>
+<span class="nc" id="L87">            return fieldItem;</span>
+<span class="nc" id="L88">        }).collect(Collectors.toList());</span>
+    }
+
+    /**
+     * 解析字段
+     *
+     * @param expr sql expr
+     * @param fieldItem 字段属性
+     */
+    private static void visitColumn(SQLExpr expr, FieldItem fieldItem) {
+<span class="nc bnc" id="L98" title="All 2 branches missed.">        if (expr instanceof SQLIdentifierExpr) {</span>
+            // 无owner
+<span class="nc" id="L100">            SQLIdentifierExpr identifierExpr = (SQLIdentifierExpr) expr;</span>
+<span class="nc bnc" id="L101" title="All 2 branches missed.">            if (fieldItem.getFieldName() == null) {</span>
+<span class="nc" id="L102">                fieldItem.setFieldName(identifierExpr.getName());</span>
+<span class="nc" id="L103">                fieldItem.setExpr(identifierExpr.toString());</span>
+            }
+<span class="nc" id="L105">            ColumnItem columnItem = new ColumnItem();</span>
+<span class="nc" id="L106">            columnItem.setColumnName(identifierExpr.getName());</span>
+<span class="nc" id="L107">            fieldItem.getOwners().add(null);</span>
+<span class="nc" id="L108">            fieldItem.addColumn(columnItem);</span>
+<span class="nc bnc" id="L109" title="All 2 branches missed.">        } else if (expr instanceof SQLPropertyExpr) {</span>
+            // 有owner
+<span class="nc" id="L111">            SQLPropertyExpr sqlPropertyExpr = (SQLPropertyExpr) expr;</span>
+<span class="nc bnc" id="L112" title="All 2 branches missed.">            if (fieldItem.getFieldName() == null) {</span>
+<span class="nc" id="L113">                fieldItem.setFieldName(sqlPropertyExpr.getName());</span>
+<span class="nc" id="L114">                fieldItem.setExpr(sqlPropertyExpr.toString());</span>
+            }
+<span class="nc" id="L116">            fieldItem.getOwners().add(sqlPropertyExpr.getOwnernName());</span>
+<span class="nc" id="L117">            ColumnItem columnItem = new ColumnItem();</span>
+<span class="nc" id="L118">            columnItem.setColumnName(sqlPropertyExpr.getName());</span>
+<span class="nc" id="L119">            columnItem.setOwner(sqlPropertyExpr.getOwnernName());</span>
+<span class="nc" id="L120">            fieldItem.addColumn(columnItem);</span>
+<span class="nc bnc" id="L121" title="All 2 branches missed.">        } else if (expr instanceof SQLMethodInvokeExpr) {</span>
+<span class="nc" id="L122">            SQLMethodInvokeExpr methodInvokeExpr = (SQLMethodInvokeExpr) expr;</span>
+<span class="nc" id="L123">            fieldItem.setMethod(true);</span>
+<span class="nc bnc" id="L124" title="All 2 branches missed.">            for (SQLExpr sqlExpr : methodInvokeExpr.getArguments()) {</span>
+<span class="nc" id="L125">                visitColumn(sqlExpr, fieldItem);</span>
+<span class="nc" id="L126">            }</span>
+<span class="nc bnc" id="L127" title="All 2 branches missed.">        } else if (expr instanceof SQLBinaryOpExpr) {</span>
+<span class="nc" id="L128">            SQLBinaryOpExpr sqlBinaryOpExpr = (SQLBinaryOpExpr) expr;</span>
+<span class="nc" id="L129">            fieldItem.setBinaryOp(true);</span>
+<span class="nc" id="L130">            visitColumn(sqlBinaryOpExpr.getLeft(), fieldItem);</span>
+<span class="nc" id="L131">            visitColumn(sqlBinaryOpExpr.getRight(), fieldItem);</span>
+<span class="nc bnc" id="L132" title="All 2 branches missed.">        } else if (expr instanceof SQLCaseExpr) {</span>
+<span class="nc" id="L133">            SQLCaseExpr sqlCaseExpr = (SQLCaseExpr) expr;</span>
+<span class="nc" id="L134">            fieldItem.setMethod(true);</span>
+<span class="nc" id="L135">            sqlCaseExpr.getItems().forEach(item -&gt; visitColumn(item.getConditionExpr(), fieldItem));</span>
+<span class="nc bnc" id="L136" title="All 2 branches missed.">        } else if (expr instanceof SQLCharExpr) {</span>
+<span class="nc" id="L137">            SQLCharExpr sqlCharExpr = (SQLCharExpr) expr;</span>
+<span class="nc" id="L138">            String owner = null;</span>
+<span class="nc" id="L139">            String columnName = null;</span>
+<span class="nc bnc" id="L140" title="All 2 branches missed.">            if (sqlCharExpr.getParent() instanceof SQLCaseExpr.Item) {</span>
+<span class="nc" id="L141">                owner = ((SQLPropertyExpr) ((SQLCaseExpr.Item) sqlCharExpr.getParent()).getValueExpr()).getOwnernName();</span>
+<span class="nc" id="L142">                columnName = ((SQLPropertyExpr) ((SQLCaseExpr.Item) sqlCharExpr.getParent()).getValueExpr()).getName();</span>
+            }
+<span class="nc bnc" id="L144" title="All 2 branches missed.">            if (fieldItem.getFieldName() == null) {</span>
+<span class="nc" id="L145">                fieldItem.setFieldName(columnName);</span>
+<span class="nc" id="L146">                fieldItem.setExpr(sqlCharExpr.toString());</span>
+            }
+<span class="nc" id="L148">            ColumnItem columnItem = new ColumnItem();</span>
+<span class="nc" id="L149">            columnItem.setColumnName(columnName);</span>
+<span class="nc" id="L150">            columnItem.setOwner(owner);</span>
+<span class="nc" id="L151">            fieldItem.getOwners().add(owner);</span>
+<span class="nc" id="L152">            fieldItem.addColumn(columnItem);</span>
+        }
+<span class="nc" id="L154">    }</span>
+
+    /**
+     * 解析表
+     *
+     * @param schemaItem 视图对象
+     * @param sqlTableSource sqlTableSource
+     * @param tableItems 表对象列表
+     * @param tableItemTmp 表对象(临时)
+     */
+    private static void visitSelectTable(SchemaItem schemaItem, SQLTableSource sqlTableSource,
+                                         List&lt;TableItem&gt; tableItems, TableItem tableItemTmp) {
+<span class="nc bnc" id="L166" title="All 2 branches missed.">        if (sqlTableSource instanceof SQLExprTableSource) {</span>
+<span class="nc" id="L167">            SQLExprTableSource sqlExprTableSource = (SQLExprTableSource) sqlTableSource;</span>
+            TableItem tableItem;
+<span class="nc bnc" id="L169" title="All 2 branches missed.">            if (tableItemTmp != null) {</span>
+<span class="nc" id="L170">                tableItem = tableItemTmp;</span>
+            } else {
+<span class="nc" id="L172">                tableItem = new TableItem(schemaItem);</span>
+            }
+<span class="nc" id="L174">            tableItem.setSchema(sqlExprTableSource.getSchema());</span>
+<span class="nc" id="L175">            tableItem.setTableName(sqlExprTableSource.getTableName());</span>
+<span class="nc bnc" id="L176" title="All 2 branches missed.">            if (tableItem.getAlias() == null) {</span>
+<span class="nc" id="L177">                tableItem.setAlias(sqlExprTableSource.getAlias());</span>
+            }
+<span class="nc bnc" id="L179" title="All 2 branches missed.">            if (tableItems.isEmpty()) {</span>
+                // 第一张表为主表
+<span class="nc" id="L181">                tableItem.setMain(true);</span>
+            }
+<span class="nc" id="L183">            tableItems.add(tableItem);</span>
+<span class="nc bnc" id="L184" title="All 2 branches missed.">        } else if (sqlTableSource instanceof SQLJoinTableSource) {</span>
+<span class="nc" id="L185">            SQLJoinTableSource sqlJoinTableSource = (SQLJoinTableSource) sqlTableSource;</span>
+<span class="nc" id="L186">            SQLTableSource leftTableSource = sqlJoinTableSource.getLeft();</span>
+<span class="nc" id="L187">            visitSelectTable(schemaItem, leftTableSource, tableItems, null);</span>
+<span class="nc" id="L188">            SQLTableSource rightTableSource = sqlJoinTableSource.getRight();</span>
+<span class="nc" id="L189">            TableItem rightTableItem = new TableItem(schemaItem);</span>
+            // 解析on条件字段
+<span class="nc" id="L191">            visitOnCondition(sqlJoinTableSource.getCondition(), rightTableItem);</span>
+<span class="nc" id="L192">            visitSelectTable(schemaItem, rightTableSource, tableItems, rightTableItem);</span>
+
+<span class="nc bnc" id="L194" title="All 2 branches missed.">        } else if (sqlTableSource instanceof SQLSubqueryTableSource) {</span>
+<span class="nc" id="L195">            SQLSubqueryTableSource subQueryTableSource = (SQLSubqueryTableSource) sqlTableSource;</span>
+<span class="nc" id="L196">            MySqlSelectQueryBlock sqlSelectQuery = (MySqlSelectQueryBlock) subQueryTableSource.getSelect().getQuery();</span>
+            TableItem tableItem;
+<span class="nc bnc" id="L198" title="All 2 branches missed.">            if (tableItemTmp != null) {</span>
+<span class="nc" id="L199">                tableItem = tableItemTmp;</span>
+            } else {
+<span class="nc" id="L201">                tableItem = new TableItem(schemaItem);</span>
+            }
+<span class="nc" id="L203">            tableItem.setAlias(subQueryTableSource.getAlias());</span>
+<span class="nc" id="L204">            tableItem.setSubQuerySql(SQLUtils.toMySqlString(sqlSelectQuery));</span>
+<span class="nc" id="L205">            tableItem.setSubQuery(true);</span>
+<span class="nc" id="L206">            tableItem.setSubQueryFields(collectSelectQueryFields(sqlSelectQuery));</span>
+<span class="nc" id="L207">            visitSelectTable(schemaItem, sqlSelectQuery.getFrom(), tableItems, tableItem);</span>
+        }
+<span class="nc" id="L209">    }</span>
+
+    /**
+     * 解析on条件
+     *
+     * @param expr sql expr
+     * @param tableItem 表对象
+     */
+    private static void visitOnCondition(SQLExpr expr, TableItem tableItem) {
+<span class="nc bnc" id="L218" title="All 2 branches missed.">        if (!(expr instanceof SQLBinaryOpExpr)) {</span>
+<span class="nc" id="L219">            throw new UnsupportedOperationException();</span>
+        }
+<span class="nc" id="L221">        SQLBinaryOpExpr sqlBinaryOpExpr = (SQLBinaryOpExpr) expr;</span>
+<span class="nc bnc" id="L222" title="All 2 branches missed.">        if (sqlBinaryOpExpr.getOperator() == BooleanAnd) {</span>
+<span class="nc" id="L223">            visitOnCondition(sqlBinaryOpExpr.getLeft(), tableItem);</span>
+<span class="nc" id="L224">            visitOnCondition(sqlBinaryOpExpr.getRight(), tableItem);</span>
+<span class="nc bnc" id="L225" title="All 2 branches missed.">        } else if (sqlBinaryOpExpr.getOperator() == Equality) {</span>
+<span class="nc" id="L226">            FieldItem leftFieldItem = new FieldItem();</span>
+<span class="nc" id="L227">            visitColumn(sqlBinaryOpExpr.getLeft(), leftFieldItem);</span>
+<span class="nc bnc" id="L228" title="All 6 branches missed.">            if (leftFieldItem.getColumnItems().size() != 1 || leftFieldItem.isMethod() || leftFieldItem.isBinaryOp()) {</span>
+<span class="nc" id="L229">                throw new UnsupportedOperationException(&quot;Unsupported for complex of on-condition&quot;);</span>
+            }
+<span class="nc" id="L231">            FieldItem rightFieldItem = new FieldItem();</span>
+<span class="nc" id="L232">            visitColumn(sqlBinaryOpExpr.getRight(), rightFieldItem);</span>
+<span class="nc bnc" id="L233" title="All 6 branches missed.">            if (rightFieldItem.getColumnItems().size() != 1 || rightFieldItem.isMethod() || rightFieldItem.isBinaryOp()) {</span>
+<span class="nc" id="L234">                throw new UnsupportedOperationException(&quot;Unsupported for complex of on-condition&quot;);</span>
+            }
+<span class="nc" id="L236">            tableItem.getRelationFields().add(new RelationFieldsPair(leftFieldItem, rightFieldItem));</span>
+<span class="nc" id="L237">        } else {</span>
+<span class="nc" id="L238">            throw new UnsupportedOperationException(&quot;Unsupported for complex of on-condition&quot;);</span>
+        }
+<span class="nc" id="L240">    }</span>
+
+    public static MySqlSelectQueryBlock parseSQLSelectQueryBlock(String sql) {
+<span class="nc bnc" id="L243" title="All 4 branches missed.">        if (sql == null || &quot;&quot;.equals(sql)) {</span>
+<span class="nc" id="L244">            return null;</span>
+        }
+<span class="nc" id="L246">        SQLStatementParser parser = new MySqlStatementParser(sql);</span>
+<span class="nc" id="L247">        SQLSelectStatement statement = (SQLSelectStatement) parser.parseStatement();</span>
+<span class="nc" id="L248">        return (MySqlSelectQueryBlock) statement.getSelect().getQuery();</span>
+    }
+
+    public static String parse4SQLSelectItem(MySqlSelectQueryBlock sqlSelectQueryBlock) {
+<span class="nc" id="L252">        List&lt;SQLSelectItem&gt; selectItems = sqlSelectQueryBlock.getSelectList();</span>
+<span class="nc" id="L253">        StringBuilder subSql = new StringBuilder();</span>
+<span class="nc" id="L254">        int i = 0;</span>
+<span class="nc bnc" id="L255" title="All 2 branches missed.">        for (SQLSelectItem sqlSelectItem : selectItems) {</span>
+<span class="nc bnc" id="L256" title="All 2 branches missed.">            if (i != 0) {</span>
+<span class="nc" id="L257">                subSql.append(&quot;,&quot;);</span>
+            } else {
+<span class="nc" id="L259">                i++;</span>
+            }
+<span class="nc" id="L261">            subSql.append(SQLUtils.toMySqlString(sqlSelectItem));</span>
+<span class="nc" id="L262">        }</span>
+<span class="nc" id="L263">        return subSql.toString();</span>
+    }
+
+    public static String parse4FromTableSource(MySqlSelectQueryBlock sqlSelectQueryBlock) {
+<span class="nc" id="L267">        SQLTableSource sqlTableSource = sqlSelectQueryBlock.getFrom();</span>
+<span class="nc" id="L268">        return SQLUtils.toMySqlString(sqlTableSource);</span>
+    }
+
+    public static String parse4WhereItem(MySqlSelectQueryBlock sqlSelectQueryBlock) {
+<span class="nc" id="L272">        SQLExpr sqlExpr = sqlSelectQueryBlock.getWhere();</span>
+<span class="nc bnc" id="L273" title="All 2 branches missed.">        if (sqlExpr != null) {</span>
+<span class="nc" id="L274">            return SQLUtils.toMySqlString(sqlExpr);</span>
+        }
+<span class="nc" id="L276">        return null;</span>
+    }
+
+    public static String parse4GroupBy(MySqlSelectQueryBlock sqlSelectQueryBlock) {
+<span class="nc" id="L280">        SQLSelectGroupByClause expr = sqlSelectQueryBlock.getGroupBy();</span>
+<span class="nc bnc" id="L281" title="All 2 branches missed.">        if (expr != null) {</span>
+<span class="nc" id="L282">            return SQLUtils.toMySqlString(expr);</span>
+        }
+<span class="nc" id="L284">        return null;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.3.201901230119</span></div></body></html>

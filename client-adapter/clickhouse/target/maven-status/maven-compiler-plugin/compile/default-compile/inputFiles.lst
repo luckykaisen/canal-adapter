@@ -1,0 +1,11 @@
+/Users/kc/Downloads/canal-canal-1.1.8_new/client-adapter/clickhouse/src/main/java/com/alibaba/otter/canal/client/adapter/clickhouse/support/SyncUtil.java
+/Users/kc/Downloads/canal-canal-1.1.8_new/client-adapter/clickhouse/src/main/java/com/alibaba/otter/canal/client/adapter/clickhouse/ClickHouseAdapter.java
+/Users/kc/Downloads/canal-canal-1.1.8_new/client-adapter/clickhouse/src/main/java/com/alibaba/otter/canal/client/adapter/clickhouse/support/BatchExecutor.java
+/Users/kc/Downloads/canal-canal-1.1.8_new/client-adapter/clickhouse/src/main/java/com/alibaba/otter/canal/client/adapter/clickhouse/config/MappingConfig.java
+/Users/kc/Downloads/canal-canal-1.1.8_new/client-adapter/clickhouse/src/main/java/com/alibaba/otter/canal/client/adapter/clickhouse/service/ClickHouseBatchSyncService.java
+/Users/kc/Downloads/canal-canal-1.1.8_new/client-adapter/clickhouse/src/main/java/com/alibaba/otter/canal/client/adapter/clickhouse/service/ClickHouseEtlService.java
+/Users/kc/Downloads/canal-canal-1.1.8_new/client-adapter/clickhouse/src/main/java/com/alibaba/otter/canal/client/adapter/clickhouse/monitor/ClickHouseConfigMonitor.java
+/Users/kc/Downloads/canal-canal-1.1.8_new/client-adapter/clickhouse/src/main/java/com/alibaba/otter/canal/client/adapter/clickhouse/service/ClickHouseMirrorDbBatchSyncService.java
+/Users/kc/Downloads/canal-canal-1.1.8_new/client-adapter/clickhouse/src/main/java/com/alibaba/otter/canal/client/adapter/clickhouse/config/MirrorDbConfig.java
+/Users/kc/Downloads/canal-canal-1.1.8_new/client-adapter/clickhouse/src/main/java/com/alibaba/otter/canal/client/adapter/clickhouse/config/ConfigLoader.java
+/Users/kc/Downloads/canal-canal-1.1.8_new/client-adapter/clickhouse/src/main/java/com/alibaba/otter/canal/client/adapter/clickhouse/support/SingleDml.java

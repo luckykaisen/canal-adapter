@@ -1,0 +1,5 @@
+com.alibaba.otter.canal.client.adapter.hbase
+com.alibaba.otter.canal.client.adapter.hbase.config
+com.alibaba.otter.canal.client.adapter.hbase.monitor
+com.alibaba.otter.canal.client.adapter.hbase.service
+com.alibaba.otter.canal.client.adapter.hbase.support

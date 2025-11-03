@@ -1,0 +1,1 @@
+packageSearchIndex = [{"l":"com.alibaba.otter.canal.client.adapter.rdb"},{"l":"com.alibaba.otter.canal.client.adapter.rdb.config"},{"l":"com.alibaba.otter.canal.client.adapter.rdb.monitor"},{"l":"com.alibaba.otter.canal.client.adapter.rdb.service"},{"l":"com.alibaba.otter.canal.client.adapter.rdb.support"},{"l":"所有程序包","u":"allpackages-index.html"}];updateSearchResults();

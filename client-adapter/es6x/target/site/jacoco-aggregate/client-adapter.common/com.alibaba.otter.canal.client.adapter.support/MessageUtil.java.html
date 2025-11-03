@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>MessageUtil.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">canal client adapter es v6x module for otter 1.1.8</a> &gt; <a href="../index.html" class="el_bundle">client-adapter.common</a> &gt; <a href="index.source.html" class="el_package">com.alibaba.otter.canal.client.adapter.support</a> &gt; <span class="el_source">MessageUtil.java</span></div><h1>MessageUtil.java</h1><pre class="source lang-java linenums">package com.alibaba.otter.canal.client.adapter.support;
+
+import java.util.*;
+
+import com.alibaba.otter.canal.connector.core.consumer.CommonMessage;
+import com.alibaba.otter.canal.protocol.CanalEntry;
+import com.alibaba.otter.canal.protocol.Message;
+
+/**
+ * Message对象解析工具类
+ *
+ * @author rewerma 2018-8-19 下午06:14:23
+ * @version 1.0.0
+ */
+<span class="nc" id="L15">public class MessageUtil {</span>
+
+    public static List&lt;Dml&gt; parse4Dml(String destination, String groupId, Message message) {
+<span class="nc bnc" id="L18" title="All 2 branches missed.">        if (message == null) {</span>
+<span class="nc" id="L19">            return null;</span>
+        }
+<span class="nc" id="L21">        List&lt;CanalEntry.Entry&gt; entries = message.getEntries();</span>
+<span class="nc" id="L22">        List&lt;Dml&gt; dmls = new ArrayList&lt;&gt;(entries.size());</span>
+<span class="nc bnc" id="L23" title="All 2 branches missed.">        for (CanalEntry.Entry entry : entries) {</span>
+<span class="nc bnc" id="L24" title="All 2 branches missed.">            if (entry.getEntryType() == CanalEntry.EntryType.TRANSACTIONBEGIN</span>
+<span class="nc bnc" id="L25" title="All 2 branches missed.">                || entry.getEntryType() == CanalEntry.EntryType.TRANSACTIONEND) {</span>
+<span class="nc" id="L26">                continue;</span>
+            }
+
+            CanalEntry.RowChange rowChange;
+            try {
+<span class="nc" id="L31">                rowChange = CanalEntry.RowChange.parseFrom(entry.getStoreValue());</span>
+<span class="nc" id="L32">            } catch (Exception e) {</span>
+<span class="nc" id="L33">                throw new RuntimeException(&quot;ERROR ## parser of eromanga-event has an error , data:&quot; + entry.toString(),</span>
+                    e);
+<span class="nc" id="L35">            }</span>
+
+<span class="nc" id="L37">            CanalEntry.EventType eventType = rowChange.getEventType();</span>
+
+<span class="nc" id="L39">            final Dml dml = new Dml();</span>
+<span class="nc" id="L40">            dml.setIsDdl(rowChange.getIsDdl());</span>
+<span class="nc" id="L41">            dml.setDestination(destination);</span>
+<span class="nc" id="L42">            dml.setGroupId(groupId);</span>
+<span class="nc" id="L43">            dml.setDatabase(entry.getHeader().getSchemaName());</span>
+<span class="nc" id="L44">            dml.setTable(entry.getHeader().getTableName());</span>
+<span class="nc" id="L45">            dml.setType(eventType.toString());</span>
+<span class="nc" id="L46">            dml.setEs(entry.getHeader().getExecuteTime());</span>
+<span class="nc" id="L47">            dml.setIsDdl(rowChange.getIsDdl());</span>
+<span class="nc" id="L48">            dml.setTs(System.currentTimeMillis());</span>
+<span class="nc" id="L49">            dml.setSql(rowChange.getSql());</span>
+<span class="nc" id="L50">            dmls.add(dml);</span>
+<span class="nc" id="L51">            List&lt;Map&lt;String, Object&gt;&gt; data = new ArrayList&lt;&gt;();</span>
+<span class="nc" id="L52">            List&lt;Map&lt;String, Object&gt;&gt; old = new ArrayList&lt;&gt;();</span>
+
+<span class="nc bnc" id="L54" title="All 2 branches missed.">            if (!rowChange.getIsDdl()) {</span>
+<span class="nc" id="L55">                Set&lt;String&gt; updateSet = new HashSet&lt;&gt;();</span>
+<span class="nc" id="L56">                dml.setPkNames(new ArrayList&lt;&gt;());</span>
+<span class="nc" id="L57">                int i = 0;</span>
+<span class="nc bnc" id="L58" title="All 2 branches missed.">                for (CanalEntry.RowData rowData : rowChange.getRowDatasList()) {</span>
+<span class="nc bnc" id="L59" title="All 6 branches missed.">                    if (eventType != CanalEntry.EventType.INSERT &amp;&amp; eventType != CanalEntry.EventType.UPDATE</span>
+                        &amp;&amp; eventType != CanalEntry.EventType.DELETE) {
+<span class="nc" id="L61">                        continue;</span>
+                    }
+
+<span class="nc" id="L64">                    Map&lt;String, Object&gt; row = new LinkedHashMap&lt;&gt;();</span>
+                    List&lt;CanalEntry.Column&gt; columns;
+
+<span class="nc bnc" id="L67" title="All 2 branches missed.">                    if (eventType == CanalEntry.EventType.DELETE) {</span>
+<span class="nc" id="L68">                        columns = rowData.getBeforeColumnsList();</span>
+                    } else {
+<span class="nc" id="L70">                        columns = rowData.getAfterColumnsList();</span>
+                    }
+
+<span class="nc bnc" id="L73" title="All 2 branches missed.">                    for (CanalEntry.Column column : columns) {</span>
+<span class="nc bnc" id="L74" title="All 2 branches missed.">                        if (i == 0) {</span>
+<span class="nc bnc" id="L75" title="All 2 branches missed.">                            if (column.getIsKey()) {</span>
+<span class="nc" id="L76">                                dml.getPkNames().add(column.getName());</span>
+                            }
+                        }
+<span class="nc bnc" id="L79" title="All 2 branches missed.">                        if (column.getIsNull()) {</span>
+<span class="nc" id="L80">                            row.put(column.getName(), null);</span>
+                        } else {
+<span class="nc" id="L82">                            row.put(column.getName(),</span>
+<span class="nc" id="L83">                                JdbcTypeUtil.typeConvert(dml.getTable(),</span>
+<span class="nc" id="L84">                                    column.getName(),</span>
+<span class="nc" id="L85">                                    column.getValue(),</span>
+<span class="nc" id="L86">                                    column.getSqlType(),</span>
+<span class="nc" id="L87">                                    column.getMysqlType()));</span>
+                        }
+                        // 获取update为true的字段
+<span class="nc bnc" id="L90" title="All 2 branches missed.">                        if (column.getUpdated()) {</span>
+<span class="nc" id="L91">                            updateSet.add(column.getName());</span>
+                        }
+<span class="nc" id="L93">                    }</span>
+<span class="nc bnc" id="L94" title="All 2 branches missed.">                    if (!row.isEmpty()) {</span>
+<span class="nc" id="L95">                        data.add(row);</span>
+                    }
+
+<span class="nc bnc" id="L98" title="All 2 branches missed.">                    if (eventType == CanalEntry.EventType.UPDATE) {</span>
+<span class="nc" id="L99">                        Map&lt;String, Object&gt; rowOld = new LinkedHashMap&lt;&gt;();</span>
+<span class="nc bnc" id="L100" title="All 2 branches missed.">                        for (CanalEntry.Column column : rowData.getBeforeColumnsList()) {</span>
+<span class="nc bnc" id="L101" title="All 2 branches missed.">                            if (updateSet.contains(column.getName())) {</span>
+<span class="nc bnc" id="L102" title="All 2 branches missed.">                                if (column.getIsNull()) {</span>
+<span class="nc" id="L103">                                    rowOld.put(column.getName(), null);</span>
+                                } else {
+<span class="nc" id="L105">                                    rowOld.put(column.getName(),</span>
+<span class="nc" id="L106">                                        JdbcTypeUtil.typeConvert(dml.getTable(),</span>
+<span class="nc" id="L107">                                            column.getName(),</span>
+<span class="nc" id="L108">                                            column.getValue(),</span>
+<span class="nc" id="L109">                                            column.getSqlType(),</span>
+<span class="nc" id="L110">                                            column.getMysqlType()));</span>
+                                }
+                            }
+<span class="nc" id="L113">                        }</span>
+                        // update操作将记录修改前的值
+<span class="nc bnc" id="L115" title="All 2 branches missed.">                        if (!rowOld.isEmpty()) {</span>
+<span class="nc" id="L116">                            old.add(rowOld);</span>
+                        }
+                    }
+
+<span class="nc" id="L120">                    i++;</span>
+<span class="nc" id="L121">                }</span>
+<span class="nc bnc" id="L122" title="All 2 branches missed.">                if (!data.isEmpty()) {</span>
+<span class="nc" id="L123">                    dml.setData(data);</span>
+                }
+<span class="nc bnc" id="L125" title="All 2 branches missed.">                if (!old.isEmpty()) {</span>
+<span class="nc" id="L126">                    dml.setOld(old);</span>
+                }
+            }
+<span class="nc" id="L129">        }</span>
+
+<span class="nc" id="L131">        return dmls;</span>
+    }
+
+    public static List&lt;Dml&gt; flatMessage2Dml(String destination, String groupId, List&lt;CommonMessage&gt; commonMessages) {
+<span class="nc bnc" id="L135" title="All 2 branches missed.">        if (commonMessages == null) {</span>
+<span class="nc" id="L136">            return new ArrayList&lt;&gt;();</span>
+        }
+<span class="nc" id="L138">        List&lt;Dml&gt; dmls = new ArrayList&lt;&gt;(commonMessages.size());</span>
+<span class="nc bnc" id="L139" title="All 2 branches missed.">        for (CommonMessage commonMessage : commonMessages) {</span>
+<span class="nc" id="L140">            Dml dml = flatMessage2Dml(destination, groupId, commonMessage);</span>
+<span class="nc bnc" id="L141" title="All 2 branches missed.">            if (dml != null) {</span>
+<span class="nc" id="L142">                dmls.add(dml);</span>
+            }
+<span class="nc" id="L144">        }</span>
+
+<span class="nc" id="L146">        return dmls;</span>
+    }
+
+    public static Dml flatMessage2Dml(String destination, String groupId, CommonMessage commonMessage) {
+<span class="nc bnc" id="L150" title="All 2 branches missed.">        if (commonMessage == null) {</span>
+<span class="nc" id="L151">            return null;</span>
+        }
+<span class="nc" id="L153">        Dml dml = new Dml();</span>
+<span class="nc" id="L154">        dml.setDestination(destination);</span>
+<span class="nc" id="L155">        dml.setGroupId(groupId);</span>
+<span class="nc" id="L156">        dml.setDatabase(commonMessage.getDatabase());</span>
+<span class="nc" id="L157">        dml.setTable(commonMessage.getTable());</span>
+<span class="nc" id="L158">        dml.setPkNames(commonMessage.getPkNames());</span>
+<span class="nc" id="L159">        dml.setIsDdl(commonMessage.getIsDdl());</span>
+<span class="nc" id="L160">        dml.setType(commonMessage.getType());</span>
+<span class="nc" id="L161">        dml.setTs(commonMessage.getTs());</span>
+<span class="nc" id="L162">        dml.setEs(commonMessage.getEs());</span>
+<span class="nc" id="L163">        dml.setSql(commonMessage.getSql());</span>
+        // if (flatMessage.getSqlType() == null || flatMessage.getMysqlType() == null) {
+        // throw new RuntimeException(&quot;SqlType or mysqlType is null&quot;);
+        // }
+<span class="nc" id="L167">        List&lt;Map&lt;String, Object&gt;&gt; data = commonMessage.getData();</span>
+<span class="nc bnc" id="L168" title="All 2 branches missed.">        if (data != null) {</span>
+<span class="nc" id="L169">            dml.setData(data);</span>
+        }
+<span class="nc" id="L171">        List&lt;Map&lt;String, Object&gt;&gt; old = commonMessage.getOld();</span>
+<span class="nc bnc" id="L172" title="All 2 branches missed.">        if (old != null) {</span>
+<span class="nc" id="L173">            dml.setOld(old);</span>
+        }
+<span class="nc" id="L175">        return dml;</span>
+    }
+
+    private static List&lt;Map&lt;String, Object&gt;&gt; changeRows(String table, List&lt;Map&lt;String, String&gt;&gt; rows,
+                                                        Map&lt;String, Integer&gt; sqlTypes, Map&lt;String, String&gt; mysqlTypes) {
+<span class="nc" id="L180">        List&lt;Map&lt;String, Object&gt;&gt; result = new ArrayList&lt;&gt;();</span>
+<span class="nc bnc" id="L181" title="All 2 branches missed.">        for (Map&lt;String, String&gt; row : rows) {</span>
+<span class="nc" id="L182">            Map&lt;String, Object&gt; resultRow = new LinkedHashMap&lt;&gt;();</span>
+<span class="nc bnc" id="L183" title="All 2 branches missed.">            for (Map.Entry&lt;String, String&gt; entry : row.entrySet()) {</span>
+<span class="nc" id="L184">                String columnName = entry.getKey();</span>
+<span class="nc" id="L185">                String columnValue = entry.getValue();</span>
+
+<span class="nc" id="L187">                Integer sqlType = sqlTypes.get(columnName);</span>
+<span class="nc bnc" id="L188" title="All 2 branches missed.">                if (sqlType == null) {</span>
+<span class="nc" id="L189">                    continue;</span>
+                }
+
+<span class="nc" id="L192">                String mysqlType = mysqlTypes.get(columnName);</span>
+<span class="nc bnc" id="L193" title="All 2 branches missed.">                if (mysqlType == null) {</span>
+<span class="nc" id="L194">                    continue;</span>
+                }
+
+<span class="nc" id="L197">                Object finalValue = JdbcTypeUtil.typeConvert(table, columnName, columnValue, sqlType, mysqlType);</span>
+<span class="nc" id="L198">                resultRow.put(columnName, finalValue);</span>
+<span class="nc" id="L199">            }</span>
+<span class="nc" id="L200">            result.add(resultRow);</span>
+<span class="nc" id="L201">        }</span>
+<span class="nc" id="L202">        return result;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.3.201901230119</span></div></body></html>

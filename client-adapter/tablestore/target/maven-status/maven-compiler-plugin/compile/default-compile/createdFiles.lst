@@ -1,0 +1,11 @@
+com/alibaba/otter/canal/client/adapter/tablestore/service/TablestoreSyncService.class
+com/alibaba/otter/canal/client/adapter/tablestore/enums/TablestoreFieldType.class
+com/alibaba/otter/canal/client/adapter/tablestore/config/ConfigLoader.class
+com/alibaba/otter/canal/client/adapter/tablestore/common/PropertyConstants.class
+com/alibaba/otter/canal/client/adapter/tablestore/config/MappingConfig$ColumnItem.class
+com/alibaba/otter/canal/client/adapter/tablestore/support/SyncUtil.class
+com/alibaba/otter/canal/client/adapter/tablestore/support/SyncUtil$1.class
+com/alibaba/otter/canal/client/adapter/tablestore/service/TablestoreEtlService.class
+com/alibaba/otter/canal/client/adapter/tablestore/config/MappingConfig.class
+com/alibaba/otter/canal/client/adapter/tablestore/TablestoreAdapter.class
+com/alibaba/otter/canal/client/adapter/tablestore/config/MappingConfig$DbMapping.class

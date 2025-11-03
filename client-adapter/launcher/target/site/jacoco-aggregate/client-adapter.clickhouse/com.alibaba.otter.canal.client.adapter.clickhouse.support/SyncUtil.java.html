@@ -1,0 +1,305 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>SyncUtil.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">canal client adapter launcher module for otter 1.1.8</a> &gt; <a href="../index.html" class="el_bundle">client-adapter.clickhouse</a> &gt; <a href="index.source.html" class="el_package">com.alibaba.otter.canal.client.adapter.clickhouse.support</a> &gt; <span class="el_source">SyncUtil.java</span></div><h1>SyncUtil.java</h1><pre class="source lang-java linenums">package com.alibaba.otter.canal.client.adapter.clickhouse.support;
+
+import java.io.Reader;
+import java.io.StringReader;
+import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.sql.*;
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+import org.apache.commons.lang.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.alibaba.druid.DbType;
+import com.alibaba.otter.canal.client.adapter.clickhouse.config.MappingConfig;
+import com.alibaba.otter.canal.client.adapter.support.Util;
+
+<span class="nc" id="L20">public class SyncUtil {</span>
+
+<span class="nc" id="L22">    private static final Logger logger = LoggerFactory.getLogger(SyncUtil.class);</span>
+
+    public static Map&lt;String, String&gt; getColumnsMap(MappingConfig.DbMapping dbMapping, Map&lt;String, Object&gt; data) {
+<span class="nc" id="L25">        return getColumnsMap(dbMapping, data.keySet());</span>
+    }
+
+    public static Map&lt;String, String&gt; getColumnsMap(MappingConfig.DbMapping dbMapping, Collection&lt;String&gt; columns) {
+        Map&lt;String, String&gt; columnsMap;
+<span class="nc bnc" id="L30" title="All 2 branches missed.">        if (dbMapping.getMapAll()) {</span>
+<span class="nc bnc" id="L31" title="All 2 branches missed.">            if (dbMapping.getAllMapColumns() != null) {</span>
+<span class="nc" id="L32">                return dbMapping.getAllMapColumns();</span>
+            }
+<span class="nc" id="L34">            columnsMap = new LinkedHashMap&lt;&gt;();</span>
+<span class="nc bnc" id="L35" title="All 2 branches missed.">            for (String srcColumn : columns) {</span>
+<span class="nc" id="L36">                boolean flag = true;</span>
+<span class="nc bnc" id="L37" title="All 2 branches missed.">                if (dbMapping.getTargetColumns() != null) {</span>
+<span class="nc bnc" id="L38" title="All 2 branches missed.">                    for (Map.Entry&lt;String, String&gt; entry : dbMapping.getTargetColumns().entrySet()) {</span>
+<span class="nc bnc" id="L39" title="All 2 branches missed.">                        if (srcColumn.equals(entry.getValue())) {</span>
+<span class="nc" id="L40">                            columnsMap.put(entry.getKey(), srcColumn);</span>
+<span class="nc" id="L41">                            flag = false;</span>
+<span class="nc" id="L42">                            break;</span>
+                        }
+<span class="nc" id="L44">                    }</span>
+                }
+<span class="nc bnc" id="L46" title="All 2 branches missed.">                if (flag) {</span>
+<span class="nc" id="L47">                    columnsMap.put(srcColumn, srcColumn);</span>
+                }
+<span class="nc" id="L49">            }</span>
+<span class="nc" id="L50">            dbMapping.setAllMapColumns(columnsMap);</span>
+        } else {
+<span class="nc" id="L52">            columnsMap = dbMapping.getTargetColumns();</span>
+        }
+<span class="nc" id="L54">        return columnsMap;</span>
+    }
+
+    /**
+     * 设置 preparedStatement
+     *
+     * @param type sqlType
+     * @param pstmt 需要设置的preparedStatement
+     * @param value 值
+     * @param i 索引号
+     */
+    public static void setPStmt(int type, PreparedStatement pstmt, Object value, int i) throws SQLException {
+<span class="nc bnc" id="L66" title="All 15 branches missed.">        switch (type) {</span>
+            case Types.BIT:
+            case Types.BOOLEAN:
+<span class="nc bnc" id="L69" title="All 2 branches missed.">                if (value instanceof Boolean) {</span>
+<span class="nc" id="L70">                    pstmt.setBoolean(i, (Boolean) value);</span>
+<span class="nc bnc" id="L71" title="All 2 branches missed.">                } else if (value instanceof String) {</span>
+<span class="nc bnc" id="L72" title="All 2 branches missed.">                    boolean v = !value.equals(&quot;0&quot;);</span>
+<span class="nc" id="L73">                    pstmt.setBoolean(i, v);</span>
+<span class="nc bnc" id="L74" title="All 2 branches missed.">                } else if (value instanceof Number) {</span>
+<span class="nc bnc" id="L75" title="All 2 branches missed.">                    boolean v = ((Number) value).intValue() != 0;</span>
+<span class="nc" id="L76">                    pstmt.setBoolean(i, v);</span>
+<span class="nc" id="L77">                } else {</span>
+<span class="nc" id="L78">                    pstmt.setNull(i, type);</span>
+                }
+<span class="nc" id="L80">                break;</span>
+            case Types.CHAR:
+            case Types.NCHAR:
+            case Types.VARCHAR:
+            case Types.LONGVARCHAR:
+<span class="nc bnc" id="L85" title="All 2 branches missed.">                if (value instanceof String) {</span>
+<span class="nc" id="L86">                    pstmt.setString(i, (String) value);</span>
+<span class="nc bnc" id="L87" title="All 2 branches missed.">                } else if (value == null) {</span>
+<span class="nc" id="L88">                    pstmt.setNull(i, type);</span>
+                } else {
+<span class="nc" id="L90">                    pstmt.setString(i, value.toString());</span>
+                }
+<span class="nc" id="L92">                break;</span>
+            case Types.TINYINT:
+                // 向上提升一级，处理unsigned情况
+<span class="nc bnc" id="L95" title="All 2 branches missed.">                if (value instanceof Number) {</span>
+<span class="nc" id="L96">                    pstmt.setShort(i, ((Number) value).shortValue());</span>
+<span class="nc bnc" id="L97" title="All 2 branches missed.">                } else if (value instanceof String) {</span>
+<span class="nc" id="L98">                    pstmt.setShort(i, Short.parseShort((String) value));</span>
+                } else {
+<span class="nc" id="L100">                    pstmt.setNull(i, type);</span>
+                }
+<span class="nc" id="L102">                break;</span>
+            case Types.SMALLINT:
+<span class="nc bnc" id="L104" title="All 2 branches missed.">                if (value instanceof Number) {</span>
+<span class="nc" id="L105">                    pstmt.setInt(i, ((Number) value).intValue());</span>
+<span class="nc bnc" id="L106" title="All 2 branches missed.">                } else if (value instanceof String) {</span>
+<span class="nc" id="L107">                    pstmt.setInt(i, Integer.parseInt((String) value));</span>
+                } else {
+<span class="nc" id="L109">                    pstmt.setNull(i, type);</span>
+                }
+<span class="nc" id="L111">                break;</span>
+            case Types.INTEGER:
+<span class="nc bnc" id="L113" title="All 2 branches missed.">                if (value instanceof Number) {</span>
+<span class="nc" id="L114">                    pstmt.setLong(i, ((Number) value).longValue());</span>
+<span class="nc bnc" id="L115" title="All 2 branches missed.">                } else if (value instanceof String) {</span>
+<span class="nc" id="L116">                    pstmt.setLong(i, Long.parseLong((String) value));</span>
+                } else {
+<span class="nc" id="L118">                    pstmt.setNull(i, type);</span>
+                }
+<span class="nc" id="L120">                break;</span>
+            case Types.BIGINT:
+<span class="nc bnc" id="L122" title="All 2 branches missed.">                if (value instanceof Number) {</span>
+<span class="nc" id="L123">                    pstmt.setBigDecimal(i, new BigDecimal(value.toString()));</span>
+<span class="nc bnc" id="L124" title="All 2 branches missed.">                } else if (value instanceof String) {</span>
+<span class="nc" id="L125">                    pstmt.setBigDecimal(i, new BigDecimal(value.toString()));</span>
+                } else {
+<span class="nc" id="L127">                    pstmt.setNull(i, type);</span>
+                }
+<span class="nc" id="L129">                break;</span>
+            case Types.DECIMAL:
+            case Types.NUMERIC:
+<span class="nc bnc" id="L132" title="All 2 branches missed.">                if (value instanceof BigDecimal) {</span>
+<span class="nc" id="L133">                    pstmt.setBigDecimal(i, (BigDecimal) value);</span>
+<span class="nc bnc" id="L134" title="All 2 branches missed.">                } else if (value instanceof Byte) {</span>
+<span class="nc" id="L135">                    pstmt.setInt(i, ((Byte) value).intValue());</span>
+<span class="nc bnc" id="L136" title="All 2 branches missed.">                } else if (value instanceof Short) {</span>
+<span class="nc" id="L137">                    pstmt.setInt(i, ((Short) value).intValue());</span>
+<span class="nc bnc" id="L138" title="All 2 branches missed.">                } else if (value instanceof Integer) {</span>
+<span class="nc" id="L139">                    pstmt.setInt(i, (Integer) value);</span>
+<span class="nc bnc" id="L140" title="All 2 branches missed.">                } else if (value instanceof Long) {</span>
+<span class="nc" id="L141">                    pstmt.setLong(i, (Long) value);</span>
+<span class="nc bnc" id="L142" title="All 2 branches missed.">                } else if (value instanceof Float) {</span>
+<span class="nc" id="L143">                    pstmt.setBigDecimal(i, new BigDecimal((float) value));</span>
+<span class="nc bnc" id="L144" title="All 2 branches missed.">                } else if (value instanceof Double) {</span>
+<span class="nc" id="L145">                    pstmt.setBigDecimal(i, new BigDecimal((double) value));</span>
+<span class="nc bnc" id="L146" title="All 2 branches missed.">                } else if (value != null) {</span>
+<span class="nc" id="L147">                    pstmt.setBigDecimal(i, new BigDecimal(value.toString()));</span>
+                } else {
+<span class="nc" id="L149">                    pstmt.setNull(i, type);</span>
+                }
+<span class="nc" id="L151">                break;</span>
+            case Types.REAL:
+<span class="nc bnc" id="L153" title="All 2 branches missed.">                if (value instanceof Number) {</span>
+<span class="nc" id="L154">                    pstmt.setFloat(i, ((Number) value).floatValue());</span>
+<span class="nc bnc" id="L155" title="All 2 branches missed.">                } else if (value instanceof String) {</span>
+<span class="nc" id="L156">                    pstmt.setFloat(i, Float.parseFloat((String) value));</span>
+                } else {
+<span class="nc" id="L158">                    pstmt.setNull(i, type);</span>
+                }
+<span class="nc" id="L160">                break;</span>
+            case Types.FLOAT:
+            case Types.DOUBLE:
+<span class="nc bnc" id="L163" title="All 2 branches missed.">                if (value instanceof Number) {</span>
+<span class="nc" id="L164">                    pstmt.setDouble(i, ((Number) value).doubleValue());</span>
+<span class="nc bnc" id="L165" title="All 2 branches missed.">                } else if (value instanceof String) {</span>
+<span class="nc" id="L166">                    pstmt.setDouble(i, Double.parseDouble((String) value));</span>
+                } else {
+<span class="nc" id="L168">                    pstmt.setNull(i, type);</span>
+                }
+<span class="nc" id="L170">                break;</span>
+            case Types.BINARY:
+            case Types.VARBINARY:
+            case Types.LONGVARBINARY:
+            case Types.BLOB:
+<span class="nc bnc" id="L175" title="All 2 branches missed.">                if (value instanceof Blob) {</span>
+<span class="nc" id="L176">                    pstmt.setBlob(i, (Blob) value);</span>
+<span class="nc bnc" id="L177" title="All 2 branches missed.">                } else if (value instanceof byte[]) {</span>
+<span class="nc" id="L178">                    pstmt.setBytes(i, (byte[]) value);</span>
+<span class="nc bnc" id="L179" title="All 2 branches missed.">                } else if (value instanceof String) {</span>
+<span class="nc" id="L180">                    pstmt.setBytes(i, ((String) value).getBytes(StandardCharsets.ISO_8859_1));</span>
+                } else {
+<span class="nc" id="L182">                    pstmt.setNull(i, type);</span>
+                }
+<span class="nc" id="L184">                break;</span>
+            case Types.CLOB:
+<span class="nc bnc" id="L186" title="All 2 branches missed.">                if (value instanceof Clob) {</span>
+<span class="nc" id="L187">                    pstmt.setClob(i, (Clob) value);</span>
+<span class="nc bnc" id="L188" title="All 2 branches missed.">                } else if (value instanceof byte[]) {</span>
+<span class="nc" id="L189">                    pstmt.setBytes(i, (byte[]) value);</span>
+<span class="nc bnc" id="L190" title="All 2 branches missed.">                } else if (value instanceof String) {</span>
+<span class="nc" id="L191">                    Reader clobReader = new StringReader((String) value);</span>
+<span class="nc" id="L192">                    pstmt.setCharacterStream(i, clobReader);</span>
+<span class="nc" id="L193">                } else {</span>
+<span class="nc" id="L194">                    pstmt.setNull(i, type);</span>
+                }
+<span class="nc" id="L196">                break;</span>
+            case Types.DATE:
+<span class="nc bnc" id="L198" title="All 2 branches missed.">                if (value instanceof Date) {</span>
+<span class="nc" id="L199">                    pstmt.setDate(i, (Date) value);</span>
+<span class="nc bnc" id="L200" title="All 2 branches missed.">                } else if (value instanceof java.util.Date) {</span>
+<span class="nc" id="L201">                    pstmt.setDate(i, new Date(((java.util.Date) value).getTime()));</span>
+<span class="nc bnc" id="L202" title="All 2 branches missed.">                } else if (value instanceof String) {</span>
+<span class="nc" id="L203">                    String v = (String) value;</span>
+<span class="nc bnc" id="L204" title="All 2 branches missed.">                    if (!v.startsWith(&quot;0000-00-00&quot;)) {</span>
+<span class="nc" id="L205">                        java.util.Date date = Util.parseDate(v);</span>
+<span class="nc bnc" id="L206" title="All 2 branches missed.">                        if (date != null) {</span>
+<span class="nc" id="L207">                            pstmt.setDate(i, new Date(date.getTime()));</span>
+                        } else {
+<span class="nc" id="L209">                            pstmt.setNull(i, type);</span>
+                        }
+<span class="nc" id="L211">                    } else {</span>
+<span class="nc" id="L212">                        pstmt.setObject(i, value);</span>
+                    }
+<span class="nc" id="L214">                } else {</span>
+<span class="nc" id="L215">                    pstmt.setNull(i, type);</span>
+                }
+<span class="nc" id="L217">                break;</span>
+            case Types.TIME:
+<span class="nc bnc" id="L219" title="All 2 branches missed.">                if (value instanceof Time) {</span>
+<span class="nc" id="L220">                    pstmt.setTime(i, (Time) value);</span>
+<span class="nc bnc" id="L221" title="All 2 branches missed.">                } else if (value instanceof java.util.Date) {</span>
+<span class="nc" id="L222">                    pstmt.setTime(i, new Time(((java.util.Date) value).getTime()));</span>
+<span class="nc bnc" id="L223" title="All 2 branches missed.">                } else if (value instanceof String) {</span>
+<span class="nc" id="L224">                    String v = (String) value;</span>
+<span class="nc" id="L225">                    java.util.Date date = Util.parseDate(v);</span>
+<span class="nc bnc" id="L226" title="All 2 branches missed.">                    if (date != null) {</span>
+<span class="nc" id="L227">                        pstmt.setTime(i, new Time(date.getTime()));</span>
+                    } else {
+<span class="nc" id="L229">                        pstmt.setNull(i, type);</span>
+                    }
+<span class="nc" id="L231">                } else {</span>
+<span class="nc" id="L232">                    pstmt.setNull(i, type);</span>
+                }
+<span class="nc" id="L234">                break;</span>
+            case Types.TIMESTAMP:
+<span class="nc bnc" id="L236" title="All 2 branches missed.">                if (value instanceof Timestamp) {</span>
+<span class="nc" id="L237">                    pstmt.setTimestamp(i, (Timestamp) value);</span>
+<span class="nc bnc" id="L238" title="All 2 branches missed.">                } else if (value instanceof java.util.Date) {</span>
+<span class="nc" id="L239">                    pstmt.setTimestamp(i, new Timestamp(((java.util.Date) value).getTime()));</span>
+<span class="nc bnc" id="L240" title="All 2 branches missed.">                } else if (value instanceof String) {</span>
+<span class="nc" id="L241">                    String v = (String) value;</span>
+<span class="nc bnc" id="L242" title="All 2 branches missed.">                    if (!v.startsWith(&quot;0000-00-00&quot;)) {</span>
+<span class="nc" id="L243">                        java.util.Date date = Util.parseDate(v);</span>
+<span class="nc bnc" id="L244" title="All 2 branches missed.">                        if (date != null) {</span>
+<span class="nc" id="L245">                            pstmt.setTimestamp(i, new Timestamp(date.getTime()));</span>
+                        } else {
+<span class="nc" id="L247">                            pstmt.setNull(i, type);</span>
+                        }
+<span class="nc" id="L249">                    } else {</span>
+<span class="nc" id="L250">                        pstmt.setObject(i, value);</span>
+                    }
+<span class="nc" id="L252">                } else {</span>
+<span class="nc" id="L253">                    pstmt.setNull(i, type);</span>
+                }
+<span class="nc" id="L255">                break;</span>
+            default:
+<span class="nc" id="L257">                pstmt.setObject(i, value, type);</span>
+        }
+<span class="nc" id="L259">    }</span>
+
+    public static String getDbTableName(MappingConfig.DbMapping dbMapping, String dbType) {
+<span class="nc" id="L262">        String result = &quot;&quot;;</span>
+<span class="nc" id="L263">        String backtick = getBacktickByDbType(dbType);</span>
+<span class="nc bnc" id="L264" title="All 2 branches missed.">        if (StringUtils.isNotEmpty(dbMapping.getTargetDb())) {</span>
+<span class="nc" id="L265">            result += (backtick + dbMapping.getTargetDb() + backtick + &quot;.&quot;);</span>
+        }
+<span class="nc" id="L267">        result += (backtick + dbMapping.getTargetTable() + backtick);</span>
+<span class="nc" id="L268">        return result;</span>
+    }
+
+    public static String getSourceDbTableName(MappingConfig.DbMapping dbMapping, String dbType) {
+<span class="nc" id="L272">        String result = &quot;&quot;;</span>
+<span class="nc" id="L273">        String backtick = getBacktickByDbType(dbType);</span>
+<span class="nc bnc" id="L274" title="All 2 branches missed.">        if (StringUtils.isNotEmpty(dbMapping.getDatabase())) {</span>
+<span class="nc" id="L275">            result += (backtick + dbMapping.getDatabase() + backtick + &quot;.&quot;);</span>
+        }
+
+<span class="nc" id="L278">        result += (backtick + dbMapping.getTable() + backtick);</span>
+<span class="nc" id="L279">        return result;</span>
+    }
+
+    /**
+     * 根据DbType返回反引号或空字符串
+     *
+     * @param dbTypeName DbType名称
+     * @return 反引号或空字符串
+     */
+    public static String getBacktickByDbType(String dbTypeName) {
+<span class="nc" id="L289">        DbType dbType = DbType.of(dbTypeName);</span>
+<span class="nc bnc" id="L290" title="All 2 branches missed.">        if (dbType == null) {</span>
+<span class="nc" id="L291">            dbType = DbType.other;</span>
+        }
+
+        // 只有当dbType为MySQL/MariaDB或OceanBase时返回反引号
+<span class="nc bnc" id="L295" title="All 2 branches missed.">        switch (dbType) {</span>
+            case mysql:
+            case mariadb:
+            case oceanbase:
+<span class="nc" id="L299">                return &quot;`&quot;;</span>
+            default:
+<span class="nc" id="L301">                return &quot;&quot;;</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.3.201901230119</span></div></body></html>

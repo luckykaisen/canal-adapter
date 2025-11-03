@@ -1,0 +1,341 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>ClickHouseAdapter.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">canal client adapter launcher module for otter 1.1.8</a> &gt; <a href="../index.html" class="el_bundle">client-adapter.clickhouse</a> &gt; <a href="index.source.html" class="el_package">com.alibaba.otter.canal.client.adapter.clickhouse</a> &gt; <span class="el_source">ClickHouseAdapter.java</span></div><h1>ClickHouseAdapter.java</h1><pre class="source lang-java linenums">package com.alibaba.otter.canal.client.adapter.clickhouse;
+
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+
+import org.apache.commons.lang.BooleanUtils;
+import org.apache.commons.lang.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.alibaba.druid.filter.stat.StatFilter;
+import com.alibaba.druid.pool.DruidDataSource;
+import com.alibaba.druid.util.JdbcUtils;
+import com.alibaba.otter.canal.client.adapter.OuterAdapter;
+import com.alibaba.otter.canal.client.adapter.clickhouse.config.ConfigLoader;
+import com.alibaba.otter.canal.client.adapter.clickhouse.config.MappingConfig;
+import com.alibaba.otter.canal.client.adapter.clickhouse.config.MirrorDbConfig;
+import com.alibaba.otter.canal.client.adapter.clickhouse.monitor.ClickHouseConfigMonitor;
+import com.alibaba.otter.canal.client.adapter.clickhouse.service.ClickHouseBatchSyncService;
+import com.alibaba.otter.canal.client.adapter.clickhouse.service.ClickHouseEtlService;
+import com.alibaba.otter.canal.client.adapter.clickhouse.service.ClickHouseMirrorDbBatchSyncService;
+import com.alibaba.otter.canal.client.adapter.clickhouse.support.SyncUtil;
+import com.alibaba.otter.canal.client.adapter.support.*;
+
+/**
+ * ClickHouse Adapter implementation
+ *
+ * @author: Xander
+ * @date: Created in 2023/11/10 1:13
+ * @email: zhrunxin33@gmail.com
+ */
+@SPI
+<span class="nc" id="L35">public class ClickHouseAdapter implements OuterAdapter {</span>
+
+<span class="nc" id="L37">    private static final Logger                         logger = LoggerFactory.getLogger(ClickHouseAdapter.class);</span>
+
+    // Store the mapping of filename and configuration, load yml files below
+    // resource path
+<span class="nc" id="L41">    private Map&lt;String, MappingConfig&gt;              clickHouseMapping   = new ConcurrentHashMap&lt;&gt;();</span>
+
+    // Schema -&gt; Table -&gt; MappingConfig
+<span class="nc" id="L44">    private Map&lt;String, Map&lt;String, MappingConfig&gt;&gt; mappingConfigCache  = new ConcurrentHashMap&lt;&gt;();</span>
+
+    // Mirror DB Configuration, don't need to load column mapping
+<span class="nc" id="L47">    private Map&lt;String, MirrorDbConfig&gt;             mirrorDbConfigCache = new ConcurrentHashMap&lt;&gt;();</span>
+
+    private DruidDataSource                             dataSource;
+
+    private ClickHouseBatchSyncService clickHouseBatchSyncService;
+
+    private ClickHouseMirrorDbBatchSyncService clickHouseMirrorDbBatchSyncService;
+
+    private Properties                                  envProperties;
+
+    // Launch configuration
+    private OuterAdapterConfig                      configuration;
+
+    private ClickHouseConfigMonitor clickHouseConfigMonitor;
+
+    public Map&lt;String, MappingConfig&gt; getClickHouseMapping() {
+<span class="nc" id="L63">        return clickHouseMapping;</span>
+    }
+
+    @Override
+    public void init(OuterAdapterConfig configuration, Properties envProperties) {
+<span class="nc" id="L68">        this.envProperties = envProperties;</span>
+<span class="nc" id="L69">        this.configuration = configuration;</span>
+        // Load DB type from adapter.launch/bootstrap.yml
+<span class="nc" id="L71">        Map&lt;String, String&gt; properties = configuration.getProperties();</span>
+<span class="nc" id="L72">        String dbType = JdbcUtils.getDbType(properties.get(&quot;jdbc.url&quot;), null);</span>
+        // 当.yml文件编码格式存在问题，此处clickhouse yml文件构建 可能会抛出异常
+<span class="nc" id="L74">        Map&lt;String, MappingConfig&gt; clickHouseMappingTmp = ConfigLoader.load(envProperties);</span>
+        // 过滤不匹配的key的配置
+<span class="nc" id="L76">        clickHouseMappingTmp.forEach((key, config) -&gt; {</span>
+<span class="nc" id="L77">            addConfig(key, config);</span>
+<span class="nc" id="L78">        });</span>
+
+<span class="nc bnc" id="L80" title="All 2 branches missed.">        if (clickHouseMapping.isEmpty()) {</span>
+<span class="nc" id="L81">            throw new RuntimeException(&quot;No clickhouse adapter found for config key: &quot; + configuration.getKey());</span>
+        }
+
+        // 初始化连接池
+<span class="nc" id="L85">        dataSource = new DruidDataSource();</span>
+<span class="nc" id="L86">        dataSource.setDriverClassName(properties.get(&quot;jdbc.driverClassName&quot;));</span>
+<span class="nc" id="L87">        dataSource.setUrl(properties.get(&quot;jdbc.url&quot;));</span>
+<span class="nc" id="L88">        dataSource.setUsername(properties.get(&quot;jdbc.username&quot;));</span>
+<span class="nc" id="L89">        dataSource.setPassword(properties.get(&quot;jdbc.password&quot;));</span>
+<span class="nc" id="L90">        dataSource.setInitialSize(1);</span>
+<span class="nc" id="L91">        dataSource.setMinIdle(1);</span>
+<span class="nc" id="L92">        dataSource.setMaxActive(30);</span>
+<span class="nc" id="L93">        dataSource.setMaxWait(60000);</span>
+<span class="nc" id="L94">        dataSource.setTimeBetweenEvictionRunsMillis(60000);</span>
+<span class="nc" id="L95">        dataSource.setMinEvictableIdleTimeMillis(300000);</span>
+<span class="nc" id="L96">        dataSource.setUseUnfairLock(true);</span>
+<span class="nc" id="L97">        dataSource.setDefaultAutoCommit(false); // disable auto commit or disable Transactional</span>
+<span class="nc" id="L98">        dataSource.setDbType(dbType);</span>
+
+<span class="nc bnc" id="L100" title="All 2 branches missed.">        if (&quot;true&quot;.equals(properties.getOrDefault(&quot;druid.stat.enable&quot;, &quot;true&quot;))) {</span>
+<span class="nc" id="L101">            StatFilter statFilter = new StatFilter();</span>
+<span class="nc" id="L102">            statFilter.setSlowSqlMillis(Long.parseLong(properties.getOrDefault(&quot;druid.stat.slowSqlMillis&quot;, &quot;1000&quot;)));</span>
+<span class="nc" id="L103">            statFilter.setMergeSql(true);</span>
+<span class="nc" id="L104">            statFilter.setLogSlowSql(true);</span>
+<span class="nc" id="L105">            dataSource.setProxyFilters(Collections.singletonList(statFilter));</span>
+        }
+
+        try {
+<span class="nc" id="L109">            dataSource.init();</span>
+<span class="nc" id="L110">        } catch (SQLException e) {</span>
+<span class="nc" id="L111">            logger.error(&quot;ERROR ## failed to initial datasource: &quot; + properties.get(&quot;jdbc.url&quot;), e);</span>
+<span class="nc" id="L112">        }</span>
+
+<span class="nc" id="L114">        String threads = properties.get(&quot;threads&quot;);</span>
+<span class="nc" id="L115">        String scheduleTime = properties.get(&quot;scheduleTime&quot;);</span>
+<span class="nc" id="L116">        String batchSize = properties.get(&quot;batchSize&quot;);</span>
+
+<span class="nc" id="L118">        boolean skipDupException = BooleanUtils.toBoolean(configuration.getProperties()</span>
+<span class="nc" id="L119">                .getOrDefault(&quot;skipDupException&quot;, &quot;true&quot;));</span>
+<span class="nc" id="L120">        clickHouseBatchSyncService = new ClickHouseBatchSyncService(dataSource,</span>
+<span class="nc bnc" id="L121" title="All 2 branches missed.">                threads != null ? Integer.valueOf(threads) : null,</span>
+<span class="nc bnc" id="L122" title="All 2 branches missed.">                batchSize != null ? Integer.valueOf(batchSize) : null,</span>
+<span class="nc bnc" id="L123" title="All 2 branches missed.">                scheduleTime != null ? Long.valueOf(scheduleTime) : null,</span>
+                skipDupException);
+
+<span class="nc" id="L126">        clickHouseMirrorDbBatchSyncService = new ClickHouseMirrorDbBatchSyncService(mirrorDbConfigCache,</span>
+                dataSource,
+<span class="nc bnc" id="L128" title="All 2 branches missed.">                threads != null ? Integer.valueOf(threads) : null,</span>
+<span class="nc bnc" id="L129" title="All 2 branches missed.">                batchSize != null ? Integer.valueOf(batchSize) : null,</span>
+<span class="nc bnc" id="L130" title="All 2 branches missed.">                scheduleTime != null ? Long.valueOf(scheduleTime) : null,</span>
+<span class="nc" id="L131">                clickHouseBatchSyncService.getColumnsTypeCache(),</span>
+                skipDupException);
+
+<span class="nc" id="L134">        clickHouseConfigMonitor = new ClickHouseConfigMonitor();</span>
+<span class="nc" id="L135">        clickHouseConfigMonitor.init(configuration.getKey(), this, envProperties);</span>
+<span class="nc" id="L136">    }</span>
+
+    /**
+     * Sync main entrance
+     *
+     * @param dmls 数据包
+     */
+    @Override
+    public void sync(List&lt;Dml&gt; dmls) {
+<span class="nc bnc" id="L145" title="All 4 branches missed.">        if (dmls == null || dmls.isEmpty()) {</span>
+<span class="nc" id="L146">            return;</span>
+        }
+        try {
+            // If mappingConfigCache(column mapping) is empty, that must be mirroring synchronize
+<span class="nc bnc" id="L150" title="All 2 branches missed.">            if (!mappingConfigCache.isEmpty()) {</span>
+<span class="nc" id="L151">                clickHouseBatchSyncService.sync(mappingConfigCache, dmls, envProperties);</span>
+            }
+<span class="nc" id="L153">            clickHouseMirrorDbBatchSyncService.sync(dmls);</span>
+<span class="nc" id="L154">        } catch (Exception e) {</span>
+<span class="nc" id="L155">            throw new RuntimeException(e);</span>
+<span class="nc" id="L156">        }</span>
+<span class="nc" id="L157">    }</span>
+
+    /**
+     * Destroy
+     */
+    @Override
+    public void destroy() {
+<span class="nc bnc" id="L164" title="All 2 branches missed.">        if (clickHouseConfigMonitor != null) {</span>
+<span class="nc" id="L165">            clickHouseConfigMonitor.destroy();</span>
+        }
+
+<span class="nc bnc" id="L168" title="All 2 branches missed.">        if (clickHouseBatchSyncService != null) {</span>
+<span class="nc" id="L169">            clickHouseBatchSyncService.close();</span>
+        }
+
+<span class="nc bnc" id="L172" title="All 2 branches missed.">        if (dataSource != null) {</span>
+<span class="nc" id="L173">            dataSource.close();</span>
+        }
+<span class="nc" id="L175">    }</span>
+
+
+    /**
+     * ETL方法
+     *
+     * @param task 任务名, 对应配置名
+     * @param params etl筛选条件
+     * @return ETL结果
+     */
+    @Override
+    public EtlResult etl(String task, List&lt;String&gt; params) {
+<span class="nc" id="L187">        EtlResult etlResult = new EtlResult();</span>
+<span class="nc" id="L188">        MappingConfig config = clickHouseMapping.get(task);</span>
+<span class="nc" id="L189">        ClickHouseEtlService clickhouseEtlService = new ClickHouseEtlService(dataSource, config);</span>
+<span class="nc bnc" id="L190" title="All 2 branches missed.">        if (config != null) {</span>
+<span class="nc" id="L191">            return clickhouseEtlService.importData(params);</span>
+        } else {
+<span class="nc" id="L193">            StringBuilder resultMsg = new StringBuilder();</span>
+<span class="nc" id="L194">            boolean resSucc = true;</span>
+<span class="nc bnc" id="L195" title="All 2 branches missed.">            for (MappingConfig configTmp : clickHouseMapping.values()) {</span>
+                // 取所有的destination为task的配置
+<span class="nc bnc" id="L197" title="All 2 branches missed.">                if (configTmp.getDestination().equals(task)) {</span>
+<span class="nc" id="L198">                    EtlResult etlRes = clickhouseEtlService.importData(params);</span>
+<span class="nc bnc" id="L199" title="All 2 branches missed.">                    if (!etlRes.getSucceeded()) {</span>
+<span class="nc" id="L200">                        resSucc = false;</span>
+<span class="nc" id="L201">                        resultMsg.append(etlRes.getErrorMessage()).append(&quot;\n&quot;);</span>
+                    } else {
+<span class="nc" id="L203">                        resultMsg.append(etlRes.getResultMessage()).append(&quot;\n&quot;);</span>
+                    }
+                }
+<span class="nc" id="L206">            }</span>
+<span class="nc bnc" id="L207" title="All 2 branches missed.">            if (resultMsg.length() &gt; 0) {</span>
+<span class="nc" id="L208">                etlResult.setSucceeded(resSucc);</span>
+<span class="nc bnc" id="L209" title="All 2 branches missed.">                if (resSucc) {</span>
+<span class="nc" id="L210">                    etlResult.setResultMessage(resultMsg.toString());</span>
+                } else {
+<span class="nc" id="L212">                    etlResult.setErrorMessage(resultMsg.toString());</span>
+                }
+<span class="nc" id="L214">                return etlResult;</span>
+            }
+        }
+<span class="nc" id="L217">        etlResult.setSucceeded(false);</span>
+<span class="nc" id="L218">        etlResult.setErrorMessage(&quot;Task not found&quot;);</span>
+<span class="nc" id="L219">        return etlResult;</span>
+    }
+
+    /**
+     * 获取总数方法
+     *
+     * @param task 任务名, 对应配置名
+     * @return 总数
+     */
+    @Override
+    public Map&lt;String, Object&gt; count(String task) {
+<span class="nc" id="L230">        MappingConfig config = clickHouseMapping.get(task);</span>
+<span class="nc" id="L231">        MappingConfig.DbMapping dbMapping = config.getDbMapping();</span>
+<span class="nc" id="L232">        String sql = &quot;SELECT COUNT(1) AS cnt FROM &quot; + SyncUtil.getDbTableName(dbMapping, dataSource.getDbType());</span>
+<span class="nc" id="L233">        Connection conn = null;</span>
+<span class="nc" id="L234">        Map&lt;String, Object&gt; res = new LinkedHashMap&lt;&gt;();</span>
+        try {
+<span class="nc" id="L236">            conn = dataSource.getConnection();</span>
+<span class="nc" id="L237">            Util.sqlRS(conn, sql, rs -&gt; {</span>
+                try {
+<span class="nc bnc" id="L239" title="All 2 branches missed.">                    if (rs.next()) {</span>
+<span class="nc" id="L240">                        Long rowCount = rs.getLong(&quot;cnt&quot;);</span>
+<span class="nc" id="L241">                        res.put(&quot;count&quot;, rowCount);</span>
+                    }
+<span class="nc" id="L243">                } catch (SQLException e) {</span>
+<span class="nc" id="L244">                    logger.error(e.getMessage(), e);</span>
+<span class="nc" id="L245">                }</span>
+<span class="nc" id="L246">            });</span>
+<span class="nc" id="L247">        } catch (SQLException e) {</span>
+<span class="nc" id="L248">            logger.error(e.getMessage(), e);</span>
+        } finally {
+<span class="nc bnc" id="L250" title="All 2 branches missed.">            if (conn != null) {</span>
+                try {
+<span class="nc" id="L252">                    conn.close();</span>
+<span class="nc" id="L253">                } catch (SQLException e) {</span>
+<span class="nc" id="L254">                    logger.error(e.getMessage(), e);</span>
+<span class="nc" id="L255">                }</span>
+            }
+        }
+<span class="nc" id="L258">        res.put(&quot;targetTable&quot;, SyncUtil.getDbTableName(dbMapping, dataSource.getDbType()));</span>
+
+<span class="nc" id="L260">        return res;</span>
+    }
+
+    /**
+     * 获取对应canal instance name 或 mq topic
+     *
+     * @param task 任务名, 对应配置名
+     * @return destination
+     */
+    @Override
+    public String getDestination(String task) {
+<span class="nc" id="L271">        MappingConfig config = clickHouseMapping.get(task);</span>
+<span class="nc bnc" id="L272" title="All 2 branches missed.">        if (config != null) {</span>
+<span class="nc" id="L273">            return config.getDestination();</span>
+        }
+<span class="nc" id="L275">        return null;</span>
+    }
+
+    private void addSyncConfigToCache(String configName, MappingConfig mappingConfig) {
+<span class="nc bnc" id="L279" title="All 2 branches missed.">        if (!mappingConfig.getDbMapping().getMirrorDb()) {</span>
+            String key;
+<span class="nc bnc" id="L281" title="All 4 branches missed.">            if (envProperties != null &amp;&amp; !&quot;tcp&quot;.equalsIgnoreCase(envProperties.getProperty(&quot;canal.conf.mode&quot;))) {</span>
+<span class="nc" id="L282">                key = StringUtils.trimToEmpty(mappingConfig.getDestination()) + &quot;-&quot;</span>
+<span class="nc" id="L283">                        + StringUtils.trimToEmpty(mappingConfig.getGroupId()) + &quot;_&quot;</span>
+<span class="nc" id="L284">                        + mappingConfig.getDbMapping().getDatabase() + &quot;-&quot; + mappingConfig.getDbMapping().getTable();</span>
+            } else {
+<span class="nc" id="L286">                key = StringUtils.trimToEmpty(mappingConfig.getDestination()) + &quot;_&quot;</span>
+<span class="nc" id="L287">                        + mappingConfig.getDbMapping().getDatabase() + &quot;-&quot; + mappingConfig.getDbMapping().getTable();</span>
+            }
+<span class="nc" id="L289">            Map&lt;String, MappingConfig&gt; configMap = mappingConfigCache.computeIfAbsent(key,</span>
+<span class="nc" id="L290">                    k1 -&gt; new ConcurrentHashMap&lt;&gt;());</span>
+<span class="nc" id="L291">            configMap.put(configName, mappingConfig);</span>
+<span class="nc" id="L292">        } else {</span>
+            // mirrorDB
+<span class="nc" id="L294">            String key = StringUtils.trimToEmpty(mappingConfig.getDestination()) + &quot;.&quot;</span>
+<span class="nc" id="L295">                    + mappingConfig.getDbMapping().getDatabase();</span>
+<span class="nc" id="L296">            mirrorDbConfigCache.put(key, MirrorDbConfig.create(configName, mappingConfig));</span>
+        }
+<span class="nc" id="L298">    }</span>
+
+    public boolean addConfig(String fileName, MappingConfig config) {
+<span class="nc bnc" id="L301" title="All 2 branches missed.">        if (match(config)) {</span>
+<span class="nc" id="L302">            clickHouseMapping.put(fileName, config);</span>
+<span class="nc" id="L303">            addSyncConfigToCache(fileName, config);</span>
+<span class="nc" id="L304">            FileName2KeyMapping.register(getClass().getAnnotation(SPI.class).value(), fileName,</span>
+<span class="nc" id="L305">                    configuration.getKey());</span>
+<span class="nc" id="L306">            return true;</span>
+        }
+<span class="nc" id="L308">        return false;</span>
+    }
+
+    public void updateConfig(String fileName, MappingConfig config) {
+<span class="nc bnc" id="L312" title="All 2 branches missed.">        if (config.getOuterAdapterKey() != null &amp;&amp; !config.getOuterAdapterKey()</span>
+<span class="nc bnc" id="L313" title="All 2 branches missed.">                .equals(configuration.getKey())) {</span>
+            // 理论上不允许改这个 因为本身就是通过这个关联起Adapter和Config的
+<span class="nc" id="L315">            throw new RuntimeException(&quot;not allow to change outAdapterKey&quot;);</span>
+        }
+<span class="nc" id="L317">        clickHouseMapping.put(fileName, config);</span>
+<span class="nc" id="L318">        addSyncConfigToCache(fileName, config);</span>
+<span class="nc" id="L319">    }</span>
+
+    public void deleteConfig(String fileName) {
+<span class="nc" id="L322">        clickHouseMapping.remove(fileName);</span>
+<span class="nc bnc" id="L323" title="All 2 branches missed.">        for (Map&lt;String, MappingConfig&gt; configMap : mappingConfigCache.values()) {</span>
+<span class="nc bnc" id="L324" title="All 2 branches missed.">            if (configMap != null) {</span>
+<span class="nc" id="L325">                configMap.remove(fileName);</span>
+            }
+<span class="nc" id="L327">        }</span>
+<span class="nc" id="L328">        FileName2KeyMapping.unregister(getClass().getAnnotation(SPI.class).value(), fileName);</span>
+<span class="nc" id="L329">    }</span>
+
+    private boolean match(MappingConfig config) {
+<span class="nc bnc" id="L332" title="All 2 branches missed.">        boolean sameMatch = config.getOuterAdapterKey() != null &amp;&amp; config.getOuterAdapterKey()</span>
+<span class="nc bnc" id="L333" title="All 2 branches missed.">                .equalsIgnoreCase(configuration.getKey());</span>
+<span class="nc bnc" id="L334" title="All 2 branches missed.">        boolean prefixMatch = config.getOuterAdapterKey() == null &amp;&amp; configuration.getKey()</span>
+<span class="nc bnc" id="L335" title="All 2 branches missed.">                .startsWith(StringUtils</span>
+<span class="nc" id="L336">                        .join(new String[]{Util.AUTO_GENERATED_PREFIX, config.getDestination(),</span>
+<span class="nc" id="L337">                                config.getGroupId()}, '-'));</span>
+<span class="nc bnc" id="L338" title="All 4 branches missed.">        return sameMatch || prefixMatch;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.3.201901230119</span></div></body></html>

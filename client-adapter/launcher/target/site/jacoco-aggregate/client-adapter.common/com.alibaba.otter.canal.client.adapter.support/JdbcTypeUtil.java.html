@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>JdbcTypeUtil.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">canal client adapter launcher module for otter 1.1.8</a> &gt; <a href="../index.html" class="el_bundle">client-adapter.common</a> &gt; <a href="index.source.html" class="el_package">com.alibaba.otter.canal.client.adapter.support</a> &gt; <span class="el_source">JdbcTypeUtil.java</span></div><h1>JdbcTypeUtil.java</h1><pre class="source lang-java linenums">package com.alibaba.otter.canal.client.adapter.support;
+
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.sql.Date;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Time;
+import java.sql.Timestamp;
+import java.sql.Types;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * 类型转换工具类
+ *
+ * @author rewerma 2018-8-19 下午06:14:23
+ * @version 1.0.0
+ */
+<span class="nc" id="L21">public class JdbcTypeUtil {</span>
+
+<span class="nc" id="L23">    private static Logger logger = LoggerFactory.getLogger(JdbcTypeUtil.class);</span>
+
+    public static Object getRSData(ResultSet rs, String columnName, int jdbcType) throws SQLException {
+<span class="nc bnc" id="L26" title="All 4 branches missed.">        if (jdbcType == Types.BIT || jdbcType == Types.BOOLEAN) {</span>
+<span class="nc" id="L27">            return rs.getByte(columnName);</span>
+        } else {
+<span class="nc" id="L29">            return rs.getObject(columnName);</span>
+        }
+    }
+
+    public static Class&lt;?&gt; jdbcType2javaType(int jdbcType) {
+<span class="nc bnc" id="L34" title="All 13 branches missed.">        switch (jdbcType) {</span>
+            case Types.BIT:
+            case Types.BOOLEAN:
+                // return Boolean.class;
+            case Types.TINYINT:
+<span class="nc" id="L39">                return Byte.TYPE;</span>
+            case Types.SMALLINT:
+<span class="nc" id="L41">                return Short.class;</span>
+            case Types.INTEGER:
+<span class="nc" id="L43">                return Integer.class;</span>
+            case Types.BIGINT:
+<span class="nc" id="L45">                return Long.class;</span>
+            case Types.DECIMAL:
+            case Types.NUMERIC:
+<span class="nc" id="L48">                return BigDecimal.class;</span>
+            case Types.REAL:
+<span class="nc" id="L50">                return Float.class;</span>
+            case Types.FLOAT:
+            case Types.DOUBLE:
+<span class="nc" id="L53">                return Double.class;</span>
+            case Types.CHAR:
+            case Types.VARCHAR:
+            case Types.LONGVARCHAR:
+<span class="nc" id="L57">                return String.class;</span>
+            case Types.BINARY:
+            case Types.VARBINARY:
+            case Types.LONGVARBINARY:
+            case Types.BLOB:
+<span class="nc" id="L62">                return byte[].class;</span>
+            case Types.DATE:
+<span class="nc" id="L64">                return java.sql.Date.class;</span>
+            case Types.TIME:
+<span class="nc" id="L66">                return Time.class;</span>
+            case Types.TIMESTAMP:
+<span class="nc" id="L68">                return Timestamp.class;</span>
+            default:
+<span class="nc" id="L70">                return String.class;</span>
+        }
+    }
+
+    private static boolean isText(String columnType) {
+<span class="nc bnc" id="L75" title="All 4 branches missed.">        return &quot;LONGTEXT&quot;.equalsIgnoreCase(columnType) || &quot;MEDIUMTEXT&quot;.equalsIgnoreCase(columnType)</span>
+<span class="nc bnc" id="L76" title="All 4 branches missed.">               || &quot;TEXT&quot;.equalsIgnoreCase(columnType) || &quot;TINYTEXT&quot;.equalsIgnoreCase(columnType);</span>
+    }
+
+    public static Object typeConvert(String tableName ,String columnName, String value, int sqlType, String mysqlType) {
+<span class="nc bnc" id="L80" title="All 2 branches missed.">        if (value == null</span>
+<span class="nc bnc" id="L81" title="All 10 branches missed.">            || (value.equals(&quot;&quot;) &amp;&amp; !(isText(mysqlType) || sqlType == Types.CHAR || sqlType == Types.VARCHAR || sqlType == Types.LONGVARCHAR))) {</span>
+<span class="nc" id="L82">            return null;</span>
+        }
+
+        try {
+            Object res;
+<span class="nc bnc" id="L87" title="All 13 branches missed.">            switch (sqlType) {</span>
+                case Types.INTEGER:
+<span class="nc" id="L89">                    res = Integer.parseInt(value);</span>
+<span class="nc" id="L90">                    break;</span>
+                case Types.SMALLINT:
+<span class="nc" id="L92">                    res = Short.parseShort(value);</span>
+<span class="nc" id="L93">                    break;</span>
+                case Types.BIT:
+                case Types.TINYINT:
+<span class="nc" id="L96">                    res = Byte.parseByte(value);</span>
+<span class="nc" id="L97">                    break;</span>
+                case Types.BIGINT:
+<span class="nc bnc" id="L99" title="All 4 branches missed.">                    if (mysqlType.startsWith(&quot;bigint&quot;) &amp;&amp; mysqlType.endsWith(&quot;unsigned&quot;)) {</span>
+<span class="nc" id="L100">                        res = new BigInteger(value);</span>
+                    } else {
+<span class="nc" id="L102">                        res = Long.parseLong(value);</span>
+                    }
+<span class="nc" id="L104">                    break;</span>
+                // case Types.BIT:
+                case Types.BOOLEAN:
+<span class="nc bnc" id="L107" title="All 2 branches missed.">                    res = !&quot;0&quot;.equals(value);</span>
+<span class="nc" id="L108">                    break;</span>
+                case Types.DOUBLE:
+                case Types.FLOAT:
+<span class="nc" id="L111">                    res = Double.parseDouble(value);</span>
+<span class="nc" id="L112">                    break;</span>
+                case Types.REAL:
+<span class="nc" id="L114">                    res = Float.parseFloat(value);</span>
+<span class="nc" id="L115">                    break;</span>
+                case Types.DECIMAL:
+                case Types.NUMERIC:
+<span class="nc" id="L118">                    res = new BigDecimal(value);</span>
+<span class="nc" id="L119">                    break;</span>
+                case Types.BINARY:
+                case Types.VARBINARY:
+                case Types.LONGVARBINARY:
+                case Types.BLOB:
+<span class="nc" id="L124">                    res = value.getBytes(&quot;ISO-8859-1&quot;);</span>
+<span class="nc" id="L125">                    break;</span>
+                case Types.DATE:
+<span class="nc bnc" id="L127" title="All 2 branches missed.">                    if (!value.startsWith(&quot;0000-00-00&quot;)) {</span>
+<span class="nc" id="L128">                        java.util.Date date = Util.parseDate(value);</span>
+<span class="nc bnc" id="L129" title="All 2 branches missed.">                        if (date != null) {</span>
+<span class="nc" id="L130">                            res = new Date(date.getTime());</span>
+                        } else {
+<span class="nc" id="L132">                            res = null;</span>
+                        }
+<span class="nc" id="L134">                    } else {</span>
+<span class="nc" id="L135">                        res = null;</span>
+                    }
+<span class="nc" id="L137">                    break;</span>
+                case Types.TIME: {
+<span class="nc" id="L139">                    java.util.Date date = Util.parseDate(value);</span>
+<span class="nc bnc" id="L140" title="All 2 branches missed.">                    if (date != null) {</span>
+<span class="nc" id="L141">                        res = new Time(date.getTime());</span>
+                    } else {
+<span class="nc" id="L143">                        res = null;</span>
+                    }
+<span class="nc" id="L145">                    break;</span>
+                }
+                case Types.TIMESTAMP:
+<span class="nc bnc" id="L148" title="All 2 branches missed.">                    if (!value.startsWith(&quot;0000-00-00&quot;)) {</span>
+<span class="nc" id="L149">                        java.util.Date date = Util.parseDate(value);</span>
+<span class="nc bnc" id="L150" title="All 2 branches missed.">                        if (date != null) {</span>
+<span class="nc" id="L151">                            res = new Timestamp(date.getTime());</span>
+                        } else {
+<span class="nc" id="L153">                            res = null;</span>
+                        }
+<span class="nc" id="L155">                    } else {</span>
+<span class="nc" id="L156">                        res = null;</span>
+                    }
+<span class="nc" id="L158">                    break;</span>
+                case Types.CLOB:
+                default:
+<span class="nc" id="L161">                    res = value;</span>
+                    break;
+            }
+<span class="nc" id="L164">            return res;</span>
+<span class="nc" id="L165">        } catch (Exception e) {</span>
+<span class="nc" id="L166">            logger.error(&quot;table: {} column: {}, failed convert type {} to {}&quot;, tableName, columnName, value, sqlType);</span>
+<span class="nc" id="L167">            return value;</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.3.201901230119</span></div></body></html>

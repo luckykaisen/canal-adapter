@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>TablestoreEtlService.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">canal client adapter launcher module for otter 1.1.8</a> &gt; <a href="../index.html" class="el_bundle">client-adapter.tablestore</a> &gt; <a href="index.source.html" class="el_package">com.alibaba.otter.canal.client.adapter.tablestore.service</a> &gt; <span class="el_source">TablestoreEtlService.java</span></div><h1>TablestoreEtlService.java</h1><pre class="source lang-java linenums">package com.alibaba.otter.canal.client.adapter.tablestore.service;
+
+
+import com.alibaba.otter.canal.client.adapter.support.*;
+import com.alibaba.otter.canal.client.adapter.tablestore.TablestoreAdapter;
+import com.alibaba.otter.canal.client.adapter.tablestore.config.MappingConfig;
+import com.alibaba.otter.canal.client.adapter.tablestore.support.SyncUtil;
+import com.alicloud.openservices.tablestore.TableStoreWriter;
+import com.alicloud.openservices.tablestore.model.RowChange;
+import com.alicloud.openservices.tablestore.writer.WriterResult;
+import org.springframework.util.CollectionUtils;
+
+import javax.sql.DataSource;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
+
+public class TablestoreEtlService extends AbstractEtlService {
+
+    private TableStoreWriter writer;
+    private MappingConfig config;
+    private TablestoreSyncService syncService;
+
+
+    public TablestoreEtlService(TableStoreWriter writer, MappingConfig config){
+<span class="nc" id="L33">        super(&quot;Tablestore&quot;, config);</span>
+<span class="nc" id="L34">        this.writer = writer;</span>
+<span class="nc" id="L35">        this.config = config;</span>
+<span class="nc" id="L36">        syncService = new TablestoreSyncService();</span>
+<span class="nc" id="L37">    }</span>
+
+
+    public EtlResult importData(List&lt;String&gt; params) {
+<span class="nc" id="L41">        MappingConfig.DbMapping dbMapping = config.getDbMapping();</span>
+<span class="nc" id="L42">        String sql = &quot;SELECT * FROM &quot; + SyncUtil.getDbTableName(dbMapping.getDatabase(), dbMapping.getTable());</span>
+<span class="nc" id="L43">        return importData(sql, params);</span>
+    }
+
+    @Override
+    protected boolean executeSqlImport(DataSource srcDS, String sql, List&lt;Object&gt; values,
+                                       AdapterConfig.AdapterMapping mapping, AtomicLong impCount, List&lt;String&gt; errMsg) {
+
+        try {
+<span class="nc" id="L51">            MappingConfig.DbMapping dbMapping = (MappingConfig.DbMapping) mapping;</span>
+<span class="nc" id="L52">            Map&lt;String, String&gt; columnsMap = dbMapping.getTargetColumnsParsed();</span>
+
+<span class="nc" id="L54">            Util.sqlRS(srcDS, sql, values, rs -&gt; {</span>
+<span class="nc" id="L55">                int idx = 0;</span>
+<span class="nc" id="L56">                List&lt;Future&lt;WriterResult&gt;&gt; futureList = new ArrayList&lt;&gt;();</span>
+                while (true) {
+                    try {
+<span class="nc bnc" id="L59" title="All 2 branches missed.">                        if (!rs.next()) break;</span>
+<span class="nc" id="L60">                    } catch (SQLException throwables) {</span>
+<span class="nc" id="L61">                        logger.error(&quot;Error while get data from srcDs&quot;, throwables);</span>
+<span class="nc" id="L62">                        break;</span>
+<span class="nc" id="L63">                    }</span>
+
+<span class="nc" id="L65">                    Dml dml = getDMLByRs(columnsMap, rs);</span>
+
+<span class="nc" id="L67">                    List&lt;RowChange&gt; rowChanges = syncService.getRowChanges(dml, config);</span>
+<span class="nc bnc" id="L68" title="All 2 branches missed.">                    if (CollectionUtils.isEmpty(rowChanges)) {</span>
+<span class="nc" id="L69">                        return null;</span>
+                    }
+
+
+<span class="nc" id="L73">                    Future&lt;WriterResult&gt; future = writer.addRowChangeWithFuture(rowChanges);</span>
+<span class="nc bnc" id="L74" title="All 2 branches missed.">                    if (future != null) {</span>
+<span class="nc" id="L75">                        futureList.add(future);</span>
+                    }
+
+<span class="nc" id="L78">                }</span>
+<span class="nc" id="L79">                writer.flush();</span>
+<span class="nc bnc" id="L80" title="All 2 branches missed.">                for (Future&lt;WriterResult&gt; future : futureList) {</span>
+                    try {
+<span class="nc" id="L82">                        WriterResult result = future.get();</span>
+<span class="nc bnc" id="L83" title="All 4 branches missed.">                        if (result != null &amp;&amp; result.isAllSucceed()) {</span>
+<span class="nc" id="L84">                            impCount.incrementAndGet();</span>
+<span class="nc" id="L85">                            idx++;</span>
+<span class="nc bnc" id="L86" title="All 4 branches missed.">                        } else if (result != null &amp;&amp; !result.isAllSucceed()) {</span>
+<span class="nc" id="L87">                            List&lt;WriterResult.RowChangeStatus&gt; totalFailedRows = result.getFailedRows();</span>
+<span class="nc" id="L88">                            List&lt;String&gt; msgs = totalFailedRows.stream().map(e -&gt; TablestoreAdapter.buildErrorMsgForFailedRowChange(e)).collect(Collectors.toList());</span>
+<span class="nc" id="L89">                            logger.error(&quot;Failed rows when ETL:&quot; + org.springframework.util.StringUtils.collectionToDelimitedString(msgs, &quot;,&quot;, &quot;[&quot;, &quot;]&quot;));</span>
+                        }
+<span class="nc" id="L91">                    } catch (InterruptedException e) {</span>
+<span class="nc" id="L92">                        logger.info(&quot;InterruptedException&quot;, e);</span>
+<span class="nc" id="L93">                        errMsg.add(e.getMessage());</span>
+<span class="nc" id="L94">                        Thread.currentThread().interrupt();</span>
+<span class="nc" id="L95">                    } catch (ExecutionException e) {</span>
+<span class="nc" id="L96">                        errMsg.add(e.getMessage());</span>
+<span class="nc" id="L97">                        throw new RuntimeException(e);</span>
+<span class="nc" id="L98">                    }</span>
+<span class="nc" id="L99">                }</span>
+
+<span class="nc" id="L101">                return idx;</span>
+            });
+<span class="nc" id="L103">            return true;</span>
+<span class="nc" id="L104">        } catch (Exception e) {</span>
+<span class="nc" id="L105">            logger.error(e.getMessage(), e);</span>
+<span class="nc" id="L106">            return false;</span>
+        }
+    }
+
+
+
+
+    private Dml getDMLByRs(Map&lt;String, String&gt; columnsMap, ResultSet rs) {
+        try {
+<span class="nc" id="L115">            Dml dml = new Dml();</span>
+<span class="nc" id="L116">            dml.setType(&quot;INSERT&quot;);</span>
+<span class="nc" id="L117">            Map&lt;String, Object&gt; dataMap = new HashMap&lt;&gt;();</span>
+<span class="nc" id="L118">            List&lt;Map&lt;String, Object&gt;&gt; dataList = new ArrayList&lt;&gt;();</span>
+<span class="nc" id="L119">            dataList.add(dataMap);</span>
+<span class="nc" id="L120">            dml.setData(dataList);</span>
+<span class="nc bnc" id="L121" title="All 2 branches missed.">            for (String key : columnsMap.keySet()) {</span>
+<span class="nc" id="L122">                dataMap.put(key, rs.getObject(key));</span>
+<span class="nc" id="L123">            }</span>
+
+<span class="nc" id="L125">            return dml;</span>
+<span class="nc" id="L126">        } catch (Exception e) {</span>
+<span class="nc" id="L127">            throw new RuntimeException(e);</span>
+        }
+    }
+
+
+
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.3.201901230119</span></div></body></html>

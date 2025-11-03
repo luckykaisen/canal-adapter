@@ -1,0 +1,1 @@
+packageSearchIndex = [{"l":"com.alibaba.otter.canal.client.adapter.kudu"},{"l":"com.alibaba.otter.canal.client.adapter.kudu.config"},{"l":"com.alibaba.otter.canal.client.adapter.kudu.monitor"},{"l":"com.alibaba.otter.canal.client.adapter.kudu.service"},{"l":"com.alibaba.otter.canal.client.adapter.kudu.support"},{"l":"所有程序包","u":"allpackages-index.html"}];updateSearchResults();

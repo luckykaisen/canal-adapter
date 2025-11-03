@@ -1,0 +1,514 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>ESConnection.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">canal client adapter launcher module for otter 1.1.8</a> &gt; <a href="../index.html" class="el_bundle">client-adapter.es7x</a> &gt; <a href="index.source.html" class="el_package">com.alibaba.otter.canal.client.adapter.es7x.support</a> &gt; <span class="el_source">ESConnection.java</span></div><h1>ESConnection.java</h1><pre class="source lang-java linenums">package com.alibaba.otter.canal.client.adapter.es7x.support;
+
+import java.io.IOException;
+import java.net.InetAddress;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.UnknownHostException;
+import java.util.Arrays;
+import java.util.Map;
+
+import org.apache.commons.lang.StringUtils;
+import org.apache.http.HttpHost;
+import org.apache.http.auth.AuthScope;
+import org.apache.http.auth.UsernamePasswordCredentials;
+import org.apache.http.client.CredentialsProvider;
+import org.apache.http.impl.client.BasicCredentialsProvider;
+import org.elasticsearch.action.bulk.BulkItemResponse;
+import org.elasticsearch.action.bulk.BulkRequest;
+import org.elasticsearch.action.bulk.BulkRequestBuilder;
+import org.elasticsearch.action.bulk.BulkResponse;
+import org.elasticsearch.action.delete.DeleteRequest;
+import org.elasticsearch.action.delete.DeleteRequestBuilder;
+import org.elasticsearch.action.index.IndexRequest;
+import org.elasticsearch.action.index.IndexRequestBuilder;
+import org.elasticsearch.action.search.SearchRequest;
+import org.elasticsearch.action.search.SearchRequestBuilder;
+import org.elasticsearch.action.search.SearchResponse;
+import org.elasticsearch.action.update.UpdateRequest;
+import org.elasticsearch.action.update.UpdateRequestBuilder;
+import org.elasticsearch.client.RequestOptions;
+import org.elasticsearch.client.RestClient;
+import org.elasticsearch.client.RestClientBuilder;
+import org.elasticsearch.client.RestHighLevelClient;
+import org.elasticsearch.client.indices.GetMappingsRequest;
+import org.elasticsearch.client.indices.GetMappingsResponse;
+import org.elasticsearch.client.transport.TransportClient;
+import org.elasticsearch.cluster.metadata.MappingMetaData;
+import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.transport.TransportAddress;
+import org.elasticsearch.index.query.QueryBuilder;
+import org.elasticsearch.rest.RestStatus;
+import org.elasticsearch.search.builder.SearchSourceBuilder;
+import org.elasticsearch.transport.client.PreBuiltTransportClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.alibaba.otter.canal.client.adapter.es.core.support.ESBulkRequest;
+
+/**
+ * ES 连接器, Transport Rest 两种方式
+ *
+ * @author rewerma 2019-08-01
+ * @version 1.0.0
+ */
+public class ESConnection {
+
+<span class="nc" id="L57">    private static final Logger logger = LoggerFactory.getLogger(ESConnection.class);</span>
+
+<span class="nc" id="L59">    public enum ESClientMode {</span>
+<span class="nc" id="L60">        TRANSPORT, REST</span>
+    }
+
+    private ESClientMode        mode;
+
+    @SuppressWarnings(&quot;deprecation&quot;)
+    private TransportClient     transportClient;
+
+    private RestHighLevelClient restHighLevelClient;
+
+<span class="nc" id="L70">    public ESConnection(String[] hosts, Map&lt;String, String&gt; properties, ESClientMode mode) throws UnknownHostException{</span>
+<span class="nc" id="L71">        this.mode = mode;</span>
+<span class="nc bnc" id="L72" title="All 2 branches missed.">        if (mode == ESClientMode.TRANSPORT) {</span>
+<span class="nc" id="L73">            Settings.Builder settingBuilder = Settings.builder();</span>
+<span class="nc" id="L74">            settingBuilder.put(&quot;cluster.name&quot;, properties.get(&quot;cluster.name&quot;));</span>
+<span class="nc" id="L75">            Settings settings = settingBuilder.build();</span>
+<span class="nc" id="L76">            transportClient = new PreBuiltTransportClient(settings);</span>
+<span class="nc bnc" id="L77" title="All 2 branches missed.">            for (String host : hosts) {</span>
+<span class="nc" id="L78">                int i = host.indexOf(&quot;:&quot;);</span>
+<span class="nc" id="L79">                transportClient.addTransportAddress(new TransportAddress(InetAddress.getByName(host.substring(0, i)),</span>
+<span class="nc" id="L80">                    Integer.parseInt(host.substring(i + 1))));</span>
+            }
+<span class="nc" id="L82">        } else {</span>
+<span class="nc" id="L83">            HttpHost[] httpHosts = Arrays.stream(hosts).map(this::createHttpHost).toArray(HttpHost[]::new);</span>
+<span class="nc" id="L84">            RestClientBuilder restClientBuilder = RestClient.builder(httpHosts);</span>
+<span class="nc" id="L85">            String nameAndPwd = properties.get(&quot;security.auth&quot;);</span>
+<span class="nc bnc" id="L86" title="All 4 branches missed.">            if (StringUtils.isNotEmpty(nameAndPwd) &amp;&amp; nameAndPwd.contains(&quot;:&quot;)) {</span>
+<span class="nc" id="L87">                String[] nameAndPwdArr = nameAndPwd.split(&quot;:&quot;);</span>
+<span class="nc" id="L88">                final CredentialsProvider credentialsProvider = new BasicCredentialsProvider();</span>
+<span class="nc" id="L89">                credentialsProvider.setCredentials(AuthScope.ANY, new UsernamePasswordCredentials(nameAndPwdArr[0],</span>
+                    nameAndPwdArr[1]));
+<span class="nc" id="L91">                restClientBuilder.setHttpClientConfigCallback(httpClientBuilder -&gt; httpClientBuilder.setDefaultCredentialsProvider(credentialsProvider));</span>
+            }
+<span class="nc" id="L93">            restHighLevelClient = new RestHighLevelClient(restClientBuilder);</span>
+        }
+<span class="nc" id="L95">    }</span>
+
+    public void close() {
+<span class="nc bnc" id="L98" title="All 2 branches missed.">        if (mode == ESClientMode.TRANSPORT) {</span>
+<span class="nc" id="L99">            transportClient.close();</span>
+        } else {
+            try {
+<span class="nc" id="L102">                restHighLevelClient.close();</span>
+<span class="nc" id="L103">            } catch (IOException e) {</span>
+<span class="nc" id="L104">                throw new RuntimeException(e);</span>
+<span class="nc" id="L105">            }</span>
+        }
+<span class="nc" id="L107">    }</span>
+
+    public MappingMetaData getMapping(String index) {
+<span class="nc" id="L110">        MappingMetaData mappingMetaData = null;</span>
+<span class="nc bnc" id="L111" title="All 2 branches missed.">        if (mode == ESClientMode.TRANSPORT) {</span>
+            try {
+<span class="nc" id="L113">                mappingMetaData = transportClient.admin()</span>
+<span class="nc" id="L114">                    .cluster()</span>
+<span class="nc" id="L115">                    .prepareState()</span>
+<span class="nc" id="L116">                    .execute()</span>
+<span class="nc" id="L117">                    .actionGet()</span>
+<span class="nc" id="L118">                    .getState()</span>
+<span class="nc" id="L119">                    .getMetaData()</span>
+<span class="nc" id="L120">                    .getIndices()</span>
+<span class="nc" id="L121">                    .get(index)</span>
+<span class="nc" id="L122">                    .mapping();</span>
+<span class="nc" id="L123">            } catch (NullPointerException e) {</span>
+<span class="nc" id="L124">                throw new IllegalArgumentException(&quot;Not found the mapping info of index: &quot; + index);</span>
+<span class="nc" id="L125">            }</span>
+        } else {
+            Map&lt;String, MappingMetaData&gt; mappings;
+            try {
+<span class="nc" id="L129">                GetMappingsRequest request = new GetMappingsRequest();</span>
+<span class="nc" id="L130">                request.indices(index);</span>
+<span class="nc" id="L131">                GetMappingsResponse response = restHighLevelClient.indices()</span>
+<span class="nc" id="L132">                    .getMapping(request, RequestOptions.DEFAULT);</span>
+
+<span class="nc" id="L134">                mappings = response.mappings();</span>
+<span class="nc" id="L135">            } catch (NullPointerException e) {</span>
+<span class="nc" id="L136">                throw new IllegalArgumentException(&quot;Not found the mapping info of index: &quot; + index);</span>
+<span class="nc" id="L137">            } catch (IOException e) {</span>
+<span class="nc" id="L138">                logger.error(e.getMessage(), e);</span>
+<span class="nc" id="L139">                return null;</span>
+<span class="nc" id="L140">            }</span>
+<span class="nc" id="L141">            mappingMetaData = mappings.get(index);</span>
+        }
+<span class="nc" id="L143">        return mappingMetaData;</span>
+    }
+
+    public class ES7xIndexRequest implements ESBulkRequest.ESIndexRequest {
+
+        private IndexRequestBuilder indexRequestBuilder;
+
+        private IndexRequest        indexRequest;
+
+<span class="nc" id="L152">        public ES7xIndexRequest(String index, String id){</span>
+<span class="nc bnc" id="L153" title="All 2 branches missed.">            if (mode == ESClientMode.TRANSPORT) {</span>
+<span class="nc" id="L154">                indexRequestBuilder = transportClient.prepareIndex();</span>
+<span class="nc" id="L155">                indexRequestBuilder.setIndex(index);</span>
+<span class="nc" id="L156">                indexRequestBuilder.setId(id);</span>
+            } else {
+<span class="nc" id="L158">                indexRequest = new IndexRequest(index);</span>
+<span class="nc" id="L159">                indexRequest.id(id);</span>
+            }
+<span class="nc" id="L161">        }</span>
+
+        public ES7xIndexRequest setSource(Map&lt;String, ?&gt; source) {
+<span class="nc bnc" id="L164" title="All 2 branches missed.">            if (mode == ESClientMode.TRANSPORT) {</span>
+<span class="nc" id="L165">                indexRequestBuilder.setSource(source);</span>
+            } else {
+<span class="nc" id="L167">                indexRequest.source(source);</span>
+            }
+<span class="nc" id="L169">            return this;</span>
+        }
+
+        public ES7xIndexRequest setRouting(String routing) {
+<span class="nc bnc" id="L173" title="All 2 branches missed.">            if (mode == ESClientMode.TRANSPORT) {</span>
+<span class="nc" id="L174">                indexRequestBuilder.setRouting(routing);</span>
+            } else {
+<span class="nc" id="L176">                indexRequest.routing(routing);</span>
+            }
+<span class="nc" id="L178">            return this;</span>
+        }
+
+        public IndexRequestBuilder getIndexRequestBuilder() {
+<span class="nc" id="L182">            return indexRequestBuilder;</span>
+        }
+
+        public void setIndexRequestBuilder(IndexRequestBuilder indexRequestBuilder) {
+<span class="nc" id="L186">            this.indexRequestBuilder = indexRequestBuilder;</span>
+<span class="nc" id="L187">        }</span>
+
+        public IndexRequest getIndexRequest() {
+<span class="nc" id="L190">            return indexRequest;</span>
+        }
+
+        public void setIndexRequest(IndexRequest indexRequest) {
+<span class="nc" id="L194">            this.indexRequest = indexRequest;</span>
+<span class="nc" id="L195">        }</span>
+    }
+
+    public class ES7xUpdateRequest implements ESBulkRequest.ESUpdateRequest {
+
+        private UpdateRequestBuilder updateRequestBuilder;
+
+        private UpdateRequest        updateRequest;
+
+<span class="nc" id="L204">        public ES7xUpdateRequest(String index, String id){</span>
+<span class="nc bnc" id="L205" title="All 2 branches missed.">            if (mode == ESClientMode.TRANSPORT) {</span>
+<span class="nc" id="L206">                updateRequestBuilder = transportClient.prepareUpdate();</span>
+<span class="nc" id="L207">                updateRequestBuilder.setIndex(index);</span>
+<span class="nc" id="L208">                updateRequestBuilder.setId(id);</span>
+            } else {
+<span class="nc" id="L210">                updateRequest = new UpdateRequest(index, id);</span>
+            }
+<span class="nc" id="L212">        }</span>
+
+        public ES7xUpdateRequest setDoc(Map source) {
+<span class="nc bnc" id="L215" title="All 2 branches missed.">            if (mode == ESClientMode.TRANSPORT) {</span>
+<span class="nc" id="L216">                updateRequestBuilder.setDoc(source);</span>
+            } else {
+<span class="nc" id="L218">                updateRequest.doc(source);</span>
+            }
+<span class="nc" id="L220">            return this;</span>
+        }
+
+        public ES7xUpdateRequest setDocAsUpsert(boolean shouldUpsertDoc) {
+<span class="nc bnc" id="L224" title="All 2 branches missed.">            if (mode == ESClientMode.TRANSPORT) {</span>
+<span class="nc" id="L225">                updateRequestBuilder.setDocAsUpsert(shouldUpsertDoc);</span>
+            } else {
+<span class="nc" id="L227">                updateRequest.docAsUpsert(shouldUpsertDoc);</span>
+            }
+<span class="nc" id="L229">            return this;</span>
+        }
+
+        public ES7xUpdateRequest setRouting(String routing) {
+<span class="nc bnc" id="L233" title="All 2 branches missed.">            if (mode == ESClientMode.TRANSPORT) {</span>
+<span class="nc" id="L234">                updateRequestBuilder.setRouting(routing);</span>
+            } else {
+<span class="nc" id="L236">                updateRequest.routing(routing);</span>
+            }
+<span class="nc" id="L238">            return this;</span>
+        }
+
+        public UpdateRequestBuilder getUpdateRequestBuilder() {
+<span class="nc" id="L242">            return updateRequestBuilder;</span>
+        }
+
+        public void setUpdateRequestBuilder(UpdateRequestBuilder updateRequestBuilder) {
+<span class="nc" id="L246">            this.updateRequestBuilder = updateRequestBuilder;</span>
+<span class="nc" id="L247">        }</span>
+
+        public UpdateRequest getUpdateRequest() {
+<span class="nc" id="L250">            return updateRequest;</span>
+        }
+
+        public void setUpdateRequest(UpdateRequest updateRequest) {
+<span class="nc" id="L254">            this.updateRequest = updateRequest;</span>
+<span class="nc" id="L255">        }</span>
+    }
+
+    public class ES7xDeleteRequest implements ESBulkRequest.ESDeleteRequest {
+
+        private DeleteRequestBuilder deleteRequestBuilder;
+
+        private DeleteRequest        deleteRequest;
+
+<span class="nc" id="L264">        public ES7xDeleteRequest(String index, String id){</span>
+<span class="nc bnc" id="L265" title="All 2 branches missed.">            if (mode == ESClientMode.TRANSPORT) {</span>
+<span class="nc" id="L266">                deleteRequestBuilder = transportClient.prepareDelete();</span>
+<span class="nc" id="L267">                deleteRequestBuilder.setIndex(index);</span>
+<span class="nc" id="L268">                deleteRequestBuilder.setId(id);</span>
+            } else {
+<span class="nc" id="L270">                deleteRequest = new DeleteRequest(index, id);</span>
+            }
+<span class="nc" id="L272">        }</span>
+
+        public DeleteRequestBuilder getDeleteRequestBuilder() {
+<span class="nc" id="L275">            return deleteRequestBuilder;</span>
+        }
+
+        public void setDeleteRequestBuilder(DeleteRequestBuilder deleteRequestBuilder) {
+<span class="nc" id="L279">            this.deleteRequestBuilder = deleteRequestBuilder;</span>
+<span class="nc" id="L280">        }</span>
+
+        public DeleteRequest getDeleteRequest() {
+<span class="nc" id="L283">            return deleteRequest;</span>
+        }
+
+        public void setDeleteRequest(DeleteRequest deleteRequest) {
+<span class="nc" id="L287">            this.deleteRequest = deleteRequest;</span>
+<span class="nc" id="L288">        }</span>
+    }
+
+    public class ESSearchRequest {
+
+        private SearchRequestBuilder searchRequestBuilder;
+
+        private SearchRequest        searchRequest;
+
+        private SearchSourceBuilder  sourceBuilder;
+
+<span class="nc" id="L299">        public ESSearchRequest(String index){</span>
+<span class="nc bnc" id="L300" title="All 2 branches missed.">            if (mode == ESClientMode.TRANSPORT) {</span>
+<span class="nc" id="L301">                searchRequestBuilder = transportClient.prepareSearch(index);</span>
+            } else {
+<span class="nc" id="L303">                searchRequest = new SearchRequest(index);</span>
+<span class="nc" id="L304">                sourceBuilder = new SearchSourceBuilder();</span>
+            }
+<span class="nc" id="L306">        }</span>
+
+        public ESSearchRequest setQuery(QueryBuilder queryBuilder) {
+<span class="nc bnc" id="L309" title="All 2 branches missed.">            if (mode == ESClientMode.TRANSPORT) {</span>
+<span class="nc" id="L310">                searchRequestBuilder.setQuery(queryBuilder);</span>
+            } else {
+<span class="nc" id="L312">                sourceBuilder.query(queryBuilder);</span>
+            }
+<span class="nc" id="L314">            return this;</span>
+        }
+
+        public ESSearchRequest size(int size) {
+<span class="nc bnc" id="L318" title="All 2 branches missed.">            if (mode == ESClientMode.TRANSPORT) {</span>
+<span class="nc" id="L319">                searchRequestBuilder.setSize(size);</span>
+            } else {
+<span class="nc" id="L321">                sourceBuilder.size(size);</span>
+            }
+<span class="nc" id="L323">            return this;</span>
+        }
+
+        public SearchResponse getResponse() {
+<span class="nc bnc" id="L327" title="All 2 branches missed.">            if (mode == ESClientMode.TRANSPORT) {</span>
+<span class="nc" id="L328">                return searchRequestBuilder.get();</span>
+            } else {
+<span class="nc" id="L330">                searchRequest.source(sourceBuilder);</span>
+                try {
+<span class="nc" id="L332">                    return restHighLevelClient.search(searchRequest, RequestOptions.DEFAULT);</span>
+<span class="nc" id="L333">                } catch (IOException e) {</span>
+<span class="nc" id="L334">                    throw new RuntimeException(e);</span>
+                }
+            }
+        }
+
+        public SearchRequestBuilder getSearchRequestBuilder() {
+<span class="nc" id="L340">            return searchRequestBuilder;</span>
+        }
+
+        public void setSearchRequestBuilder(SearchRequestBuilder searchRequestBuilder) {
+<span class="nc" id="L344">            this.searchRequestBuilder = searchRequestBuilder;</span>
+<span class="nc" id="L345">        }</span>
+
+        public SearchRequest getSearchRequest() {
+<span class="nc" id="L348">            return searchRequest;</span>
+        }
+
+        public void setSearchRequest(SearchRequest searchRequest) {
+<span class="nc" id="L352">            this.searchRequest = searchRequest;</span>
+<span class="nc" id="L353">        }</span>
+    }
+
+    public class ES7xBulkRequest implements ESBulkRequest {
+
+        private BulkRequestBuilder bulkRequestBuilder;
+
+        private BulkRequest        bulkRequest;
+
+<span class="nc" id="L362">        public ES7xBulkRequest(){</span>
+<span class="nc bnc" id="L363" title="All 2 branches missed.">            if (mode == ESClientMode.TRANSPORT) {</span>
+<span class="nc" id="L364">                bulkRequestBuilder = transportClient.prepareBulk();</span>
+            } else {
+<span class="nc" id="L366">                bulkRequest = new BulkRequest();</span>
+            }
+<span class="nc" id="L368">        }</span>
+
+        public void resetBulk() {
+<span class="nc bnc" id="L371" title="All 2 branches missed.">            if (mode == ESClientMode.TRANSPORT) {</span>
+<span class="nc" id="L372">                bulkRequestBuilder = transportClient.prepareBulk();</span>
+            } else {
+<span class="nc" id="L374">                bulkRequest = new BulkRequest();</span>
+            }
+<span class="nc" id="L376">        }</span>
+
+        public ES7xBulkRequest add(ESIndexRequest esIndexRequest) {
+<span class="nc" id="L379">            ES7xIndexRequest eir = (ES7xIndexRequest) esIndexRequest;</span>
+<span class="nc bnc" id="L380" title="All 2 branches missed.">            if (mode == ESClientMode.TRANSPORT) {</span>
+<span class="nc" id="L381">                bulkRequestBuilder.add(eir.indexRequestBuilder);</span>
+            } else {
+<span class="nc" id="L383">                bulkRequest.add(eir.indexRequest);</span>
+            }
+<span class="nc" id="L385">            return this;</span>
+        }
+
+        public ES7xBulkRequest add(ESUpdateRequest esUpdateRequest) {
+<span class="nc" id="L389">            ES7xUpdateRequest eur = (ES7xUpdateRequest) esUpdateRequest;</span>
+<span class="nc bnc" id="L390" title="All 2 branches missed.">            if (mode == ESClientMode.TRANSPORT) {</span>
+<span class="nc" id="L391">                bulkRequestBuilder.add(eur.updateRequestBuilder);</span>
+            } else {
+<span class="nc" id="L393">                bulkRequest.add(eur.updateRequest);</span>
+            }
+<span class="nc" id="L395">            return this;</span>
+        }
+
+        public ES7xBulkRequest add(ESDeleteRequest esDeleteRequest) {
+<span class="nc" id="L399">            ES7xDeleteRequest edr = (ES7xDeleteRequest) esDeleteRequest;</span>
+<span class="nc bnc" id="L400" title="All 2 branches missed.">            if (mode == ESClientMode.TRANSPORT) {</span>
+<span class="nc" id="L401">                bulkRequestBuilder.add(edr.deleteRequestBuilder);</span>
+            } else {
+<span class="nc" id="L403">                bulkRequest.add(edr.deleteRequest);</span>
+            }
+<span class="nc" id="L405">            return this;</span>
+        }
+
+        public int numberOfActions() {
+<span class="nc bnc" id="L409" title="All 2 branches missed.">            if (mode == ESClientMode.TRANSPORT) {</span>
+<span class="nc" id="L410">                return bulkRequestBuilder.numberOfActions();</span>
+            } else {
+<span class="nc" id="L412">                return bulkRequest.numberOfActions();</span>
+            }
+        }
+
+        public ESBulkResponse bulk() {
+<span class="nc bnc" id="L417" title="All 2 branches missed.">            if (mode == ESClientMode.TRANSPORT) {</span>
+<span class="nc" id="L418">                BulkResponse responses = bulkRequestBuilder.execute().actionGet();</span>
+<span class="nc" id="L419">                return new ES7xBulkResponse(responses);</span>
+            } else {
+                try {
+<span class="nc" id="L422">                    BulkResponse responses = restHighLevelClient.bulk(bulkRequest, RequestOptions.DEFAULT);</span>
+<span class="nc" id="L423">                    return new ES7xBulkResponse(responses);</span>
+<span class="nc" id="L424">                } catch (IOException e) {</span>
+<span class="nc" id="L425">                    throw new RuntimeException(e);</span>
+                }
+            }
+        }
+
+        public BulkRequestBuilder getBulkRequestBuilder() {
+<span class="nc" id="L431">            return bulkRequestBuilder;</span>
+        }
+
+        public void setBulkRequestBuilder(BulkRequestBuilder bulkRequestBuilder) {
+<span class="nc" id="L435">            this.bulkRequestBuilder = bulkRequestBuilder;</span>
+<span class="nc" id="L436">        }</span>
+
+        public BulkRequest getBulkRequest() {
+<span class="nc" id="L439">            return bulkRequest;</span>
+        }
+
+        public void setBulkRequest(BulkRequest bulkRequest) {
+<span class="nc" id="L443">            this.bulkRequest = bulkRequest;</span>
+<span class="nc" id="L444">        }</span>
+    }
+
+    public static class ES7xBulkResponse implements ESBulkRequest.ESBulkResponse {
+
+        private BulkResponse bulkResponse;
+
+<span class="nc" id="L451">        public ES7xBulkResponse(BulkResponse bulkResponse){</span>
+<span class="nc" id="L452">            this.bulkResponse = bulkResponse;</span>
+<span class="nc" id="L453">        }</span>
+
+        @Override
+        public boolean hasFailures() {
+<span class="nc" id="L457">            return bulkResponse.hasFailures();</span>
+        }
+
+        @Override
+        public void processFailBulkResponse(String errorMsg) {
+<span class="nc bnc" id="L462" title="All 2 branches missed.">            for (BulkItemResponse itemResponse : bulkResponse.getItems()) {</span>
+<span class="nc bnc" id="L463" title="All 2 branches missed.">                if (!itemResponse.isFailed()) {</span>
+<span class="nc" id="L464">                    continue;</span>
+                }
+
+<span class="nc bnc" id="L467" title="All 2 branches missed.">                if (itemResponse.getFailure().getStatus() == RestStatus.NOT_FOUND) {</span>
+<span class="nc" id="L468">                    logger.error(itemResponse.getFailureMessage());</span>
+                } else {
+<span class="nc" id="L470">                    throw new RuntimeException(errorMsg + itemResponse.getFailureMessage());</span>
+                }
+            }
+<span class="nc" id="L473">        }</span>
+    }
+
+    // ------ get/set ------
+    public ESClientMode getMode() {
+<span class="nc" id="L478">        return mode;</span>
+    }
+
+    public void setMode(ESClientMode mode) {
+<span class="nc" id="L482">        this.mode = mode;</span>
+<span class="nc" id="L483">    }</span>
+
+    public TransportClient getTransportClient() {
+<span class="nc" id="L486">        return transportClient;</span>
+    }
+
+    public void setTransportClient(TransportClient transportClient) {
+<span class="nc" id="L490">        this.transportClient = transportClient;</span>
+<span class="nc" id="L491">    }</span>
+
+    public RestHighLevelClient getRestHighLevelClient() {
+<span class="nc" id="L494">        return restHighLevelClient;</span>
+    }
+
+    public void setRestHighLevelClient(RestHighLevelClient restHighLevelClient) {
+<span class="nc" id="L498">        this.restHighLevelClient = restHighLevelClient;</span>
+<span class="nc" id="L499">    }</span>
+
+    private HttpHost createHttpHost(String uriStr) {
+<span class="nc" id="L502">        URI uri = URI.create(uriStr);</span>
+<span class="nc bnc" id="L503" title="All 2 branches missed.">        if (!org.springframework.util.StringUtils.hasLength(uri.getUserInfo())) {</span>
+<span class="nc" id="L504">            return HttpHost.create(uri.toString());</span>
+        }
+        try {
+<span class="nc" id="L507">            return HttpHost.create(new URI(uri.getScheme(), null, uri.getHost(), uri.getPort(), uri.getPath(),</span>
+<span class="nc" id="L508">                                           uri.getQuery(), uri.getFragment()).toString());</span>
+<span class="nc" id="L509">        } catch (URISyntaxException ex) {</span>
+<span class="nc" id="L510">            throw new IllegalStateException(ex);</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.3.201901230119</span></div></body></html>

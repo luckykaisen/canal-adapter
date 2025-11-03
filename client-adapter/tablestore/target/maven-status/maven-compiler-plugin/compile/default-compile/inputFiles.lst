@@ -1,0 +1,8 @@
+/Users/kc/Downloads/canal-canal-1.1.8_new/client-adapter/tablestore/src/main/java/com/alibaba/otter/canal/client/adapter/tablestore/config/MappingConfig.java
+/Users/kc/Downloads/canal-canal-1.1.8_new/client-adapter/tablestore/src/main/java/com/alibaba/otter/canal/client/adapter/tablestore/common/PropertyConstants.java
+/Users/kc/Downloads/canal-canal-1.1.8_new/client-adapter/tablestore/src/main/java/com/alibaba/otter/canal/client/adapter/tablestore/support/SyncUtil.java
+/Users/kc/Downloads/canal-canal-1.1.8_new/client-adapter/tablestore/src/main/java/com/alibaba/otter/canal/client/adapter/tablestore/service/TablestoreSyncService.java
+/Users/kc/Downloads/canal-canal-1.1.8_new/client-adapter/tablestore/src/main/java/com/alibaba/otter/canal/client/adapter/tablestore/config/ConfigLoader.java
+/Users/kc/Downloads/canal-canal-1.1.8_new/client-adapter/tablestore/src/main/java/com/alibaba/otter/canal/client/adapter/tablestore/TablestoreAdapter.java
+/Users/kc/Downloads/canal-canal-1.1.8_new/client-adapter/tablestore/src/main/java/com/alibaba/otter/canal/client/adapter/tablestore/service/TablestoreEtlService.java
+/Users/kc/Downloads/canal-canal-1.1.8_new/client-adapter/tablestore/src/main/java/com/alibaba/otter/canal/client/adapter/tablestore/enums/TablestoreFieldType.java

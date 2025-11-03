@@ -1,0 +1,398 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>TablestoreSyncService.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">canal client adapter launcher module for otter 1.1.8</a> &gt; <a href="../index.html" class="el_bundle">client-adapter.tablestore</a> &gt; <a href="index.source.html" class="el_package">com.alibaba.otter.canal.client.adapter.tablestore.service</a> &gt; <span class="el_source">TablestoreSyncService.java</span></div><h1>TablestoreSyncService.java</h1><pre class="source lang-java linenums">package com.alibaba.otter.canal.client.adapter.tablestore.service;
+
+
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Future;
+
+
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONWriter.Feature;
+import com.alibaba.otter.canal.client.adapter.tablestore.enums.TablestoreFieldType;
+import com.alibaba.otter.canal.client.adapter.tablestore.support.SyncUtil;
+import com.alicloud.openservices.tablestore.TableStoreWriter;
+import com.alicloud.openservices.tablestore.model.*;
+import com.alicloud.openservices.tablestore.writer.WriterResult;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import com.alibaba.otter.canal.client.adapter.tablestore.config.MappingConfig;
+import com.alibaba.otter.canal.client.adapter.support.Dml;
+import org.springframework.util.CollectionUtils;
+
+
+/**
+ * RDB同步操作业务
+ *
+ * @author rewerma 2018-11-7 下午06:45:49
+ * @version 1.0.0
+ */
+public class TablestoreSyncService {
+
+<span class="nc" id="L31">    private static final Logger               logger  = LoggerFactory.getLogger(TablestoreSyncService.class);</span>
+
+    private Map&lt;String, Map&lt;String, Integer&gt;&gt; columnsTypeCache;
+
+
+    public Map&lt;String, Map&lt;String, Integer&gt;&gt; getColumnsTypeCache() {
+<span class="nc" id="L37">        return columnsTypeCache;</span>
+    }
+
+    public TablestoreSyncService(){
+<span class="nc" id="L41">        this(new ConcurrentHashMap&lt;&gt;());</span>
+<span class="nc" id="L42">    }</span>
+
+    @SuppressWarnings(&quot;unchecked&quot;)
+<span class="nc" id="L45">    public TablestoreSyncService(Map&lt;String, Map&lt;String, Integer&gt;&gt; columnsTypeCache){</span>
+<span class="nc" id="L46">        this.columnsTypeCache = columnsTypeCache;</span>
+
+<span class="nc" id="L48">    }</span>
+
+    public Future&lt;WriterResult&gt; sync(MappingConfig mappingConfig,
+                     Dml dml,
+                     TableStoreWriter writer) {
+
+<span class="nc" id="L54">        List&lt;RowChange&gt; rowChanges = getRowChanges(dml, mappingConfig);</span>
+<span class="nc bnc" id="L55" title="All 2 branches missed.">        if (CollectionUtils.isEmpty(rowChanges)) {</span>
+<span class="nc" id="L56">            return null;</span>
+        }
+
+<span class="nc" id="L59">        Future&lt;WriterResult&gt; future = writer.addRowChangeWithFuture(rowChanges);</span>
+
+<span class="nc bnc" id="L61" title="All 2 branches missed.">        if (logger.isDebugEnabled()) {</span>
+<span class="nc" id="L62">            logger.debug(&quot;DML: {}&quot;, JSON.toJSONString(dml, Feature.WriteNulls));</span>
+        }
+<span class="nc" id="L64">        return future;</span>
+    }
+
+    public List&lt;RowChange&gt; getRowChanges(Dml dml, MappingConfig config) {
+<span class="nc" id="L68">        String type = dml.getType();</span>
+<span class="nc" id="L69">        boolean updateColume = config.getUpdateChangeColumns();</span>
+<span class="nc bnc" id="L70" title="All 4 branches missed.">        if (type != null &amp;&amp; type.equalsIgnoreCase(&quot;INSERT&quot;)) {</span>
+<span class="nc" id="L71">            return getInsertChanges(dml, updateColume, config);</span>
+<span class="nc bnc" id="L72" title="All 4 branches missed.">        } else if (type != null &amp;&amp; type.equalsIgnoreCase(&quot;UPDATE&quot;)) {</span>
+<span class="nc" id="L73">            return getUpdateChanges(dml, updateColume, config);</span>
+<span class="nc bnc" id="L74" title="All 4 branches missed.">        } else if (type != null &amp;&amp; type.equalsIgnoreCase(&quot;DELETE&quot;)) {</span>
+<span class="nc" id="L75">            return getDeleteChanges(dml, updateColume, config);</span>
+        } else {
+<span class="nc" id="L77">            return null;</span>
+        }
+    }
+
+    /**
+     * Update 类型下构造rowChangeList
+     * @param dml
+     * @param isColumnUpdate
+     * @param config
+     * @return
+     */
+    private List&lt;RowChange&gt; getUpdateChanges(Dml dml, boolean isColumnUpdate, MappingConfig config) {
+<span class="nc" id="L89">        List&lt;RowChange&gt; changeList = new ArrayList&lt;&gt;();</span>
+<span class="nc" id="L90">        Map&lt;String, String&gt; columnMap = config.getDbMapping().getTargetColumnsParsed();</span>
+<span class="nc" id="L91">        Map&lt;String, MappingConfig.ColumnItem&gt; typeMap = SyncUtil.getTypeMap(config);</span>
+<span class="nc" id="L92">        MappingConfig.DbMapping dbMapping = config.getDbMapping();</span>
+
+<span class="nc bnc" id="L94" title="All 2 branches missed.">        if (isColumnUpdate) {</span>
+            // 列更新
+<span class="nc bnc" id="L96" title="All 2 branches missed.">            for (int i = 0; i &lt; dml.getData().size(); i++) {</span>
+<span class="nc" id="L97">                Map&lt;String, Object&gt; map = dml.getData().get(i);</span>
+<span class="nc" id="L98">                Map&lt;String, Object&gt; old = dml.getOld().get(i);</span>
+<span class="nc" id="L99">                boolean isPrimaryKeyChange = isPrimaryKeyChange(old, dbMapping.getTargetPk());</span>
+<span class="nc bnc" id="L100" title="All 2 branches missed.">                if (isPrimaryKeyChange) {</span>
+                    // 如果发现主键修改用put delete操作
+                    // 先 delete
+<span class="nc" id="L103">                    RowUpdateChange change = new RowUpdateChange(dbMapping.getTargetTable());</span>
+<span class="nc" id="L104">                    PrimaryKey primaryKey = buildOldPrimaryKey(map, typeMap, columnMap, dbMapping.getTargetPk(), old);</span>
+<span class="nc" id="L105">                    change.setPrimaryKey(primaryKey);</span>
+<span class="nc bnc" id="L106" title="All 2 branches missed.">                    for (Map.Entry&lt;String, Object&gt; entry : map.entrySet()) {</span>
+<span class="nc bnc" id="L107" title="All 2 branches missed.">                        if (dbMapping.getTargetPk().containsKey(entry.getKey())) {</span>
+                            // 这是个主键, 不需要再次处理
+<span class="nc" id="L109">                            continue;</span>
+                        }
+<span class="nc bnc" id="L111" title="All 2 branches missed.">                        if (!dbMapping.getTargetColumns().containsKey(entry.getKey())) {</span>
+                            // 可能是没有配置的字段
+<span class="nc" id="L113">                            continue;</span>
+                        }
+                        // 非主键
+<span class="nc" id="L116">                        String targetColumn = columnMap.get(entry.getKey());</span>
+<span class="nc" id="L117">                        change.deleteColumns(targetColumn);</span>
+<span class="nc" id="L118">                    }</span>
+<span class="nc" id="L119">                    changeList.add(change);</span>
+
+                    // 然后再put
+<span class="nc" id="L122">                    change = new RowUpdateChange(dbMapping.getTargetTable());</span>
+<span class="nc" id="L123">                    primaryKey = buildPrimaryKey(map, typeMap, columnMap, dbMapping.getTargetPk());</span>
+<span class="nc" id="L124">                    change.setPrimaryKey(primaryKey);</span>
+
+<span class="nc" id="L126">                    List&lt;Column&gt; columnList = getColumnsWhenPut(columnMap, dbMapping, map, typeMap);</span>
+<span class="nc bnc" id="L127" title="All 2 branches missed.">                    if (!CollectionUtils.isEmpty(columnList)) {</span>
+<span class="nc" id="L128">                        change.put(columnList);</span>
+<span class="nc" id="L129">                        changeList.add(change);</span>
+                    }
+
+
+<span class="nc" id="L133">                } else {</span>
+                    //否则用update
+<span class="nc" id="L135">                    RowUpdateChange change = new RowUpdateChange(dbMapping.getTargetTable());</span>
+<span class="nc" id="L136">                    PrimaryKey primaryKey = buildPrimaryKey(map, typeMap, columnMap, dbMapping.getTargetPk());</span>
+<span class="nc" id="L137">                    change.setPrimaryKey(primaryKey);</span>
+                    // 部分update 部分delete
+
+<span class="nc" id="L140">                    boolean validData = false;</span>
+<span class="nc bnc" id="L141" title="All 2 branches missed.">                    for (Map.Entry&lt;String, Object&gt; entry : old.entrySet()) {</span>
+<span class="nc bnc" id="L142" title="All 2 branches missed.">                        if (dbMapping.getTargetPk().containsKey(entry.getKey())) {</span>
+                            // 这是个主键, 不需要再次处理
+<span class="nc" id="L144">                            continue;</span>
+                        }
+<span class="nc bnc" id="L146" title="All 2 branches missed.">                        if (!dbMapping.getTargetColumns().containsKey(entry.getKey())) {</span>
+                            // 可能是没有配置的字段
+<span class="nc" id="L148">                            continue;</span>
+                        }
+                        // 非主键
+<span class="nc" id="L151">                        String targetColumn = columnMap.get(entry.getKey());</span>
+<span class="nc" id="L152">                        Object value = map.get(entry.getKey());</span>
+<span class="nc" id="L153">                        validData = true;</span>
+<span class="nc bnc" id="L154" title="All 2 branches missed.">                        if (value == null) {</span>
+<span class="nc" id="L155">                            change.deleteColumns(targetColumn);</span>
+                        } else {
+<span class="nc" id="L157">                            TablestoreFieldType type = typeMap.get(entry.getKey()).getType();</span>
+<span class="nc" id="L158">                            ColumnValue columnValue = SyncUtil.getColumnValue(value, type);</span>
+<span class="nc" id="L159">                            change.put(targetColumn, columnValue);</span>
+                        }
+<span class="nc" id="L161">                    }</span>
+<span class="nc bnc" id="L162" title="All 2 branches missed.">                    if (validData) {</span>
+<span class="nc" id="L163">                        changeList.add(change);</span>
+                    }
+
+                }
+            }
+
+        } else {
+            // 列覆盖
+<span class="nc bnc" id="L171" title="All 2 branches missed.">            for (int i = 0; i &lt; dml.getData().size(); i++) {</span>
+<span class="nc" id="L172">                Map&lt;String, Object&gt; map = dml.getData().get(i);</span>
+
+<span class="nc" id="L174">                RowPutChange change = new RowPutChange(dbMapping.getTargetTable());</span>
+<span class="nc" id="L175">                PrimaryKey primaryKey = buildPrimaryKey(map, typeMap, columnMap, dbMapping.getTargetPk());</span>
+<span class="nc" id="L176">                change.setPrimaryKey(primaryKey);</span>
+
+<span class="nc" id="L178">                List&lt;Column&gt; columnList = getColumnsWhenPut(columnMap, dbMapping, map, typeMap);</span>
+<span class="nc bnc" id="L179" title="All 2 branches missed.">                if (!CollectionUtils.isEmpty(columnList)) {</span>
+<span class="nc" id="L180">                    change.addColumns(columnList);</span>
+<span class="nc" id="L181">                    changeList.add(change);</span>
+                }
+
+<span class="nc bnc" id="L184" title="All 2 branches missed.">                if (dml.getOld() != null) {</span>
+                    // 如果主键发生修改，需要在tablestore中删除对应的原记录
+<span class="nc" id="L186">                    Map&lt;String, Object&gt; old = dml.getOld().get(i);</span>
+<span class="nc bnc" id="L187" title="All 2 branches missed.">                    if (isPrimaryKeyChange(old, dbMapping.getTargetPk())) {</span>
+<span class="nc" id="L188">                        RowDeleteChange delete = new RowDeleteChange(dbMapping.getTargetTable());</span>
+<span class="nc" id="L189">                        PrimaryKey primaryKeyDelete = buildOldPrimaryKey(map, typeMap, columnMap, dbMapping.getTargetPk(), old);</span>
+<span class="nc" id="L190">                        delete.setPrimaryKey(primaryKeyDelete);</span>
+<span class="nc" id="L191">                        changeList.add(delete);</span>
+                    }
+
+                }
+
+            }
+        }
+
+<span class="nc" id="L199">        return changeList;</span>
+    }
+
+    /**
+     * Delete 类型下构造rowChangeList
+     * @param dml
+     * @param isColumnUpdate
+     * @param config
+     * @return
+     */
+    private List&lt;RowChange&gt; getDeleteChanges(Dml dml, boolean isColumnUpdate, MappingConfig config) {
+<span class="nc" id="L210">        List&lt;RowChange&gt; changeList = new ArrayList&lt;&gt;();</span>
+<span class="nc" id="L211">        Map&lt;String, String&gt; columnMap = config.getDbMapping().getTargetColumnsParsed();</span>
+<span class="nc" id="L212">        Map&lt;String, MappingConfig.ColumnItem&gt; typeMap = SyncUtil.getTypeMap(config);</span>
+<span class="nc" id="L213">        MappingConfig.DbMapping dbMapping = config.getDbMapping();</span>
+
+<span class="nc bnc" id="L215" title="All 2 branches missed.">        if (isColumnUpdate) {</span>
+            // 列更新
+<span class="nc bnc" id="L217" title="All 2 branches missed.">            for (Map&lt;String, Object&gt; map : dml.getData()) {</span>
+<span class="nc" id="L218">                RowUpdateChange change = new RowUpdateChange(dbMapping.getTargetTable());</span>
+<span class="nc" id="L219">                PrimaryKey primaryKey = buildPrimaryKey(map, typeMap, columnMap, dbMapping.getTargetPk());</span>
+<span class="nc" id="L220">                change.setPrimaryKey(primaryKey);</span>
+<span class="nc" id="L221">                boolean validData = false;</span>
+<span class="nc bnc" id="L222" title="All 2 branches missed.">                for (Map.Entry&lt;String, Object&gt; entry : map.entrySet()) {</span>
+<span class="nc bnc" id="L223" title="All 2 branches missed.">                    if (dbMapping.getTargetPk().containsKey(entry.getKey())) {</span>
+                        // 这是个主键, 不需要再次处理
+<span class="nc" id="L225">                        continue;</span>
+                    }
+<span class="nc bnc" id="L227" title="All 2 branches missed.">                    if (!dbMapping.getTargetColumns().containsKey(entry.getKey())) {</span>
+                        // 可能是没有配置的字段
+<span class="nc" id="L229">                        continue;</span>
+                    }
+                    // 非主键
+<span class="nc" id="L232">                    validData = true;</span>
+<span class="nc" id="L233">                    String targetColumn = columnMap.get(entry.getKey());</span>
+<span class="nc" id="L234">                    change.deleteColumns(targetColumn);</span>
+<span class="nc" id="L235">                }</span>
+<span class="nc bnc" id="L236" title="All 2 branches missed.">                if (validData) {</span>
+<span class="nc" id="L237">                    changeList.add(change);</span>
+                }
+<span class="nc" id="L239">            }</span>
+
+        } else {
+            // 列覆盖
+<span class="nc bnc" id="L243" title="All 2 branches missed.">            for (Map&lt;String, Object&gt; map : dml.getData()) {</span>
+<span class="nc" id="L244">                RowDeleteChange change = new RowDeleteChange(dbMapping.getTargetTable());</span>
+<span class="nc" id="L245">                PrimaryKey primaryKey = buildPrimaryKey(map, typeMap, columnMap, dbMapping.getTargetPk());</span>
+<span class="nc" id="L246">                change.setPrimaryKey(primaryKey);</span>
+
+<span class="nc" id="L248">                changeList.add(change);</span>
+<span class="nc" id="L249">            }</span>
+        }
+
+<span class="nc" id="L252">        return changeList;</span>
+    }
+
+    /**
+     * Insert 类型下构造rowChangeList
+     * @param dml
+     * @param isColumnUpdate
+     * @param config
+     * @return
+     */
+    private List&lt;RowChange&gt; getInsertChanges(Dml dml, boolean isColumnUpdate, MappingConfig config) {
+<span class="nc" id="L263">        List&lt;RowChange&gt; changeList = new ArrayList&lt;&gt;();</span>
+
+<span class="nc" id="L265">        Map&lt;String, String&gt; columnMap = config.getDbMapping().getTargetColumnsParsed();</span>
+<span class="nc" id="L266">        Map&lt;String, MappingConfig.ColumnItem&gt; typeMap = SyncUtil.getTypeMap(config);</span>
+<span class="nc" id="L267">        MappingConfig.DbMapping dbMapping = config.getDbMapping();</span>
+<span class="nc bnc" id="L268" title="All 2 branches missed.">        if (isColumnUpdate) {</span>
+            // 列更新
+<span class="nc bnc" id="L270" title="All 2 branches missed.">            for (Map&lt;String, Object&gt; map : dml.getData()) {</span>
+<span class="nc" id="L271">                RowUpdateChange change = new RowUpdateChange(dbMapping.getTargetTable());</span>
+<span class="nc" id="L272">                PrimaryKey primaryKey = buildPrimaryKey(map, typeMap, columnMap, dbMapping.getTargetPk());</span>
+<span class="nc" id="L273">                change.setPrimaryKey(primaryKey);</span>
+
+<span class="nc" id="L275">                List&lt;Column&gt; columnList = getColumnsWhenPut(columnMap, dbMapping, map, typeMap);</span>
+<span class="nc bnc" id="L276" title="All 2 branches missed.">                if (!CollectionUtils.isEmpty(columnList)) {</span>
+<span class="nc" id="L277">                    change.put(columnList);</span>
+<span class="nc" id="L278">                    changeList.add(change);</span>
+                }
+<span class="nc" id="L280">            }</span>
+
+        } else {
+            // 列覆盖
+<span class="nc bnc" id="L284" title="All 2 branches missed.">            for (Map&lt;String, Object&gt; map : dml.getData()) {</span>
+<span class="nc" id="L285">                RowPutChange change = new RowPutChange(dbMapping.getTargetTable());</span>
+<span class="nc" id="L286">                PrimaryKey primaryKey = buildPrimaryKey(map, typeMap, columnMap, dbMapping.getTargetPk());</span>
+<span class="nc" id="L287">                change.setPrimaryKey(primaryKey);</span>
+
+<span class="nc" id="L289">                List&lt;Column&gt; columnList = getColumnsWhenPut(columnMap, dbMapping, map, typeMap);</span>
+<span class="nc bnc" id="L290" title="All 2 branches missed.">                if (!CollectionUtils.isEmpty(columnList)) {</span>
+<span class="nc" id="L291">                    change.addColumns(columnList);</span>
+                }
+
+<span class="nc" id="L294">                changeList.add(change);</span>
+<span class="nc" id="L295">            }</span>
+        }
+<span class="nc" id="L297">        return changeList;</span>
+    }
+
+
+    /**
+     * 组装rowChange的主键
+     * @param map 数据map
+     * @param typeMap  类型映射
+     * @param columnMap 字段名称映射
+     * @param targetPk  主键map
+     * @return
+     */
+    private PrimaryKey buildPrimaryKey(Map&lt;String, Object&gt; map, Map&lt;String, MappingConfig.ColumnItem&gt; typeMap, Map&lt;String, String&gt; columnMap, LinkedHashMap&lt;String, String&gt; targetPk) {
+<span class="nc" id="L310">        List primaryKeyList = new ArrayList&lt;&gt;();</span>
+<span class="nc bnc" id="L311" title="All 2 branches missed.">        for (Map.Entry&lt;String, String&gt; entry : targetPk.entrySet()) {</span>
+            // build primary key
+<span class="nc" id="L313">            String targetColumn = columnMap.get(entry.getKey());</span>
+<span class="nc" id="L314">            Object value = map.get(entry.getKey());</span>
+<span class="nc" id="L315">            TablestoreFieldType type = typeMap.get(entry.getKey()).getType();</span>
+<span class="nc" id="L316">            PrimaryKeyValue keyValue = SyncUtil.getPrimaryKeyValue(value, type);</span>
+<span class="nc" id="L317">            PrimaryKeyColumn primaryKeyColumn = new PrimaryKeyColumn(targetColumn, keyValue);</span>
+<span class="nc" id="L318">            primaryKeyList.add(primaryKeyColumn);</span>
+<span class="nc" id="L319">        }</span>
+<span class="nc" id="L320">        return new PrimaryKey(primaryKeyList);</span>
+    }
+
+
+
+    private PrimaryKey buildOldPrimaryKey(Map&lt;String, Object&gt; map,
+                                          Map&lt;String, MappingConfig.ColumnItem&gt; typeMap,
+                                          Map&lt;String, String&gt; columnMap,
+                                          LinkedHashMap&lt;String, String&gt; targetPk,
+                                          Map&lt;String, Object&gt; old) {
+<span class="nc" id="L330">        List primaryKeyList = new ArrayList&lt;&gt;();</span>
+<span class="nc bnc" id="L331" title="All 2 branches missed.">        for (Map.Entry&lt;String, String&gt; entry : targetPk.entrySet()) {</span>
+            // build primary key
+<span class="nc" id="L333">            String targetColumn = columnMap.get(entry.getKey());</span>
+<span class="nc bnc" id="L334" title="All 6 branches missed.">            Object value = old != null &amp;&amp; old.containsKey(entry.getKey()) &amp;&amp; !old.get(entry.getKey()).equals(map.get(entry.getKey())) ? old.get(entry.getKey()) : map.get(entry.getKey());</span>
+<span class="nc" id="L335">            TablestoreFieldType type = typeMap.get(entry.getKey()).getType();</span>
+<span class="nc" id="L336">            PrimaryKeyValue keyValue = SyncUtil.getPrimaryKeyValue(value, type);</span>
+<span class="nc" id="L337">            PrimaryKeyColumn primaryKeyColumn = new PrimaryKeyColumn(targetColumn, keyValue);</span>
+<span class="nc" id="L338">            primaryKeyList.add(primaryKeyColumn);</span>
+<span class="nc" id="L339">        }</span>
+<span class="nc" id="L340">        return new PrimaryKey(primaryKeyList);</span>
+    }
+
+    /**
+     * 用于获得全量覆盖时的非主键列对应的columnlist
+     * @param columnMap
+     * @param dbMapping
+     * @param map
+     * @param typeMap
+     * @return
+     */
+    private List&lt;Column&gt; getColumnsWhenPut(Map&lt;String, String&gt; columnMap,
+                                           MappingConfig.DbMapping dbMapping,
+                                           Map&lt;String, Object&gt; map,
+                                           Map&lt;String, MappingConfig.ColumnItem&gt; typeMap) {
+<span class="nc" id="L355">        List&lt;Column&gt; columnList = new ArrayList&lt;&gt;();</span>
+<span class="nc bnc" id="L356" title="All 2 branches missed.">        for (Map.Entry&lt;String, Object&gt; entry : map.entrySet()) {</span>
+<span class="nc bnc" id="L357" title="All 2 branches missed.">            if (dbMapping.getTargetPk().containsKey(entry.getKey())) {</span>
+                // 这是个主键, 不需要再次处理
+<span class="nc" id="L359">                continue;</span>
+            }
+<span class="nc bnc" id="L361" title="All 2 branches missed.">            if (!dbMapping.getTargetColumns().containsKey(entry.getKey())) {</span>
+                // 可能是没有配置的字段
+<span class="nc" id="L363">                continue;</span>
+            }
+            // 非主键
+<span class="nc" id="L366">            String targetColumn = columnMap.get(entry.getKey());</span>
+<span class="nc" id="L367">            Object value = entry.getValue();</span>
+<span class="nc bnc" id="L368" title="All 2 branches missed.">            if (value == null) {</span>
+                // insert时空值过滤掉
+<span class="nc" id="L370">                continue;</span>
+            }
+<span class="nc" id="L372">            TablestoreFieldType type = typeMap.get(entry.getKey()).getType();</span>
+<span class="nc" id="L373">            ColumnValue columnValue = SyncUtil.getColumnValue(value, type);</span>
+<span class="nc" id="L374">            columnList.add(new Column(targetColumn, columnValue));</span>
+<span class="nc" id="L375">        }</span>
+<span class="nc" id="L376">        return columnList;</span>
+    }
+
+    /**
+     * 检查是否主键被修改
+     * @param old       old中的数据
+     * @param targetPk  主键map
+     * @return
+     */
+    private boolean isPrimaryKeyChange(Map&lt;String, Object&gt; old, Map&lt;String, String&gt; targetPk) {
+<span class="nc bnc" id="L386" title="All 2 branches missed.">        for (String pkCol : targetPk.keySet()) {</span>
+<span class="nc bnc" id="L387" title="All 2 branches missed.">            if (old.containsKey(pkCol)) {</span>
+<span class="nc" id="L388">                return true;</span>
+            }
+<span class="nc" id="L390">        }</span>
+<span class="nc" id="L391">        return false;</span>
+    }
+
+    public void close() {
+
+<span class="nc" id="L396">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.3.201901230119</span></div></body></html>

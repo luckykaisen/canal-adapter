@@ -1,0 +1,319 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>MappingConfig.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">canal client adapter launcher module for otter 1.1.8</a> &gt; <a href="../index.html" class="el_bundle">client-adapter.tablestore</a> &gt; <a href="index.source.html" class="el_package">com.alibaba.otter.canal.client.adapter.tablestore.config</a> &gt; <span class="el_source">MappingConfig.java</span></div><h1>MappingConfig.java</h1><pre class="source lang-java linenums">package com.alibaba.otter.canal.client.adapter.tablestore.config;
+
+import com.alibaba.druid.pool.DruidDataSource;
+import com.alibaba.otter.canal.client.adapter.support.AdapterConfig;
+import com.alibaba.otter.canal.client.adapter.support.DatasourceConfig;
+import com.alibaba.otter.canal.client.adapter.support.Util;
+import com.alibaba.otter.canal.client.adapter.tablestore.enums.TablestoreFieldType;
+import com.alibaba.otter.canal.client.adapter.tablestore.support.SyncUtil;
+import org.apache.commons.lang.StringUtils;
+
+import java.sql.ResultSetMetaData;
+import java.util.*;
+
+/**
+ * RDB表映射配置
+ *
+ * @author rewerma 2018-11-07 下午02:41:34
+ * @version 1.0.0
+ */
+<span class="nc" id="L20">public class MappingConfig implements AdapterConfig {</span>
+
+    private String    dataSourceKey;      // 数据源key
+
+    private String    destination;        // canal实例或MQ的topic
+
+    private String    groupId;            // groupId
+
+    private String    outerAdapterKey;    // 对应适配器的key
+
+    private DbMapping dbMapping;          // db映射配置
+
+<span class="nc" id="L32">    private Boolean updateChangeColumns = false;</span>
+
+<span class="nc" id="L34">    private Integer threads = 8;</span>
+
+    public String getDataSourceKey() {
+<span class="nc" id="L37">        return dataSourceKey;</span>
+    }
+
+    public void setDataSourceKey(String dataSourceKey) {
+<span class="nc" id="L41">        this.dataSourceKey = dataSourceKey;</span>
+<span class="nc" id="L42">    }</span>
+
+    public String getGroupId() {
+<span class="nc" id="L45">        return groupId;</span>
+    }
+
+    public void setGroupId(String groupId) {
+<span class="nc" id="L49">        this.groupId = groupId;</span>
+<span class="nc" id="L50">    }</span>
+
+    public String getOuterAdapterKey() {
+<span class="nc" id="L53">        return outerAdapterKey;</span>
+    }
+
+    public void setOuterAdapterKey(String outerAdapterKey) {
+<span class="nc" id="L57">        this.outerAdapterKey = outerAdapterKey;</span>
+<span class="nc" id="L58">    }</span>
+
+    public DbMapping getDbMapping() {
+<span class="nc" id="L61">        return dbMapping;</span>
+    }
+
+    public void setDbMapping(DbMapping dbMapping) {
+<span class="nc" id="L65">        this.dbMapping = dbMapping;</span>
+<span class="nc" id="L66">    }</span>
+
+    public String getDestination() {
+<span class="nc" id="L69">        return destination;</span>
+    }
+
+    public void setDestination(String destination) {
+<span class="nc" id="L73">        this.destination = destination;</span>
+<span class="nc" id="L74">    }</span>
+
+    public AdapterMapping getMapping() {
+<span class="nc" id="L77">        return dbMapping;</span>
+    }
+
+    public Boolean getUpdateChangeColumns() {
+<span class="nc" id="L81">        return updateChangeColumns;</span>
+    }
+
+    public void setUpdateChangeColumns(Boolean updateChangeColumns) {
+<span class="nc" id="L85">        this.updateChangeColumns = updateChangeColumns;</span>
+<span class="nc" id="L86">    }</span>
+
+    public Integer getThreads() {
+<span class="nc" id="L89">        return threads;</span>
+    }
+
+    public void setThreads(Integer threads) {
+<span class="nc" id="L93">        this.threads = threads;</span>
+<span class="nc" id="L94">    }</span>
+
+    public void validate() {
+<span class="nc bnc" id="L97" title="All 4 branches missed.">        if (dbMapping.database == null || dbMapping.database.isEmpty()) {</span>
+<span class="nc" id="L98">            throw new NullPointerException(&quot;dbMapping.database&quot;);</span>
+        }
+<span class="nc bnc" id="L100" title="All 4 branches missed.">        if (dbMapping.table == null || dbMapping.table.isEmpty()) {</span>
+<span class="nc" id="L101">            throw new NullPointerException(&quot;dbMapping.table&quot;);</span>
+        }
+<span class="nc bnc" id="L103" title="All 4 branches missed.">        if (dbMapping.targetTable == null || dbMapping.targetTable.isEmpty()) {</span>
+<span class="nc" id="L104">            throw new NullPointerException(&quot;dbMapping.targetTable&quot;);</span>
+        }
+<span class="nc" id="L106">    }</span>
+
+
+
+
+<span class="nc" id="L111">    public static class ColumnItem {</span>
+        private String targetColumn;
+        private String  column;
+        private TablestoreFieldType type;
+
+        public String getColumn() {
+<span class="nc" id="L117">            return column;</span>
+        }
+
+        public void setColumn(String column) {
+<span class="nc" id="L121">            this.column = column;</span>
+<span class="nc" id="L122">        }</span>
+
+        public TablestoreFieldType getType() {
+<span class="nc" id="L125">            return type;</span>
+        }
+
+        public void setType(TablestoreFieldType type) {
+<span class="nc" id="L129">            this.type = type;</span>
+<span class="nc" id="L130">        }</span>
+
+        public String getTargetColumn() {
+<span class="nc" id="L133">            return targetColumn;</span>
+        }
+
+        public void setTargetColumn(String targetColumn) {
+<span class="nc" id="L137">            this.targetColumn = targetColumn;</span>
+<span class="nc" id="L138">        }</span>
+
+        @Override
+        public boolean equals(Object o) {
+<span class="nc bnc" id="L142" title="All 2 branches missed.">            if (this == o) return true;</span>
+<span class="nc bnc" id="L143" title="All 4 branches missed.">            if (o == null || getClass() != o.getClass()) return false;</span>
+<span class="nc" id="L144">            ColumnItem that = (ColumnItem) o;</span>
+<span class="nc" id="L145">            return Objects.equals(column, that.column);</span>
+        }
+
+        @Override
+        public int hashCode() {
+<span class="nc" id="L150">            return Objects.hash(column);</span>
+        }
+    }
+
+
+
+<span class="nc" id="L156">    public static class DbMapping implements AdapterMapping {</span>
+
+        private String              database;                                // 数据库名或schema名
+        private String              table;                                   // 表名
+<span class="nc" id="L160">        private LinkedHashMap&lt;String, String&gt; targetPk        = new LinkedHashMap&lt;&gt;(); // 目标表主键字段</span>
+//        private boolean             mapAll          = false;                 // 映射所有字段
+
+        private String              targetTable;                             // 目标表名
+        private Map&lt;String, String&gt; targetColumns;                           // 目标表字段映射
+        private Map&lt;String, String&gt; targetColumnsParsed;
+        private String              etlCondition;                            // etl条件sql
+
+<span class="nc" id="L168">        private int                 readBatch       = 5000;</span>
+<span class="nc" id="L169">        private int                 commitBatch     = 5000;                  // etl等批量提交大小</span>
+
+<span class="nc" id="L171">        private Map&lt;String, ColumnItem&gt; columnItems        = new LinkedHashMap&lt;&gt;(); // 转换后的字段映射列表</span>
+
+        public String getDatabase() {
+<span class="nc" id="L174">            return database;</span>
+        }
+
+        public void setDatabase(String database) {
+<span class="nc" id="L178">            this.database = database;</span>
+<span class="nc" id="L179">        }</span>
+
+        public String getTable() {
+<span class="nc" id="L182">            return table;</span>
+        }
+
+        public void setTable(String table) {
+<span class="nc" id="L186">            this.table = table;</span>
+<span class="nc" id="L187">        }</span>
+
+
+        public LinkedHashMap&lt;String, String&gt; getTargetPk() {
+<span class="nc" id="L191">            return targetPk;</span>
+        }
+
+        public void setTargetPk(LinkedHashMap&lt;String, String&gt; targetPk) {
+<span class="nc" id="L195">            this.targetPk = targetPk;</span>
+<span class="nc" id="L196">        }</span>
+
+        public String getTargetTable() {
+<span class="nc" id="L199">            return targetTable;</span>
+        }
+
+        public void setTargetTable(String targetTable) {
+<span class="nc" id="L203">            this.targetTable = targetTable;</span>
+<span class="nc" id="L204">        }</span>
+
+        public Map&lt;String, String&gt; getTargetColumns() {
+<span class="nc" id="L207">            return targetColumns;</span>
+        }
+
+
+        public void setTargetColumns(Map&lt;String, String&gt; targetColumns) {
+<span class="nc" id="L212">            this.targetColumns = targetColumns;</span>
+
+<span class="nc" id="L214">        }</span>
+
+        public Map&lt;String, String&gt; getTargetColumnsParsed() {
+<span class="nc" id="L217">            return targetColumnsParsed;</span>
+        }
+
+        public String getEtlCondition() {
+<span class="nc" id="L221">            return etlCondition;</span>
+        }
+
+        public void setEtlCondition(String etlCondition) {
+<span class="nc" id="L225">            this.etlCondition = etlCondition;</span>
+<span class="nc" id="L226">        }</span>
+
+        public int getReadBatch() {
+<span class="nc" id="L229">            return readBatch;</span>
+        }
+
+        public void setReadBatch(int readBatch) {
+<span class="nc" id="L233">            this.readBatch = readBatch;</span>
+<span class="nc" id="L234">        }</span>
+
+        public int getCommitBatch() {
+<span class="nc" id="L237">            return commitBatch;</span>
+        }
+
+        public void setCommitBatch(int commitBatch) {
+<span class="nc" id="L241">            this.commitBatch = commitBatch;</span>
+<span class="nc" id="L242">        }</span>
+
+        public Map&lt;String, ColumnItem&gt; getColumnItems() {
+<span class="nc" id="L245">            return columnItems;</span>
+        }
+
+        public void setColumnItems(Map&lt;String, ColumnItem&gt; columnItems) {
+<span class="nc" id="L249">            this.columnItems = columnItems;</span>
+<span class="nc" id="L250">        }</span>
+
+        public void init(MappingConfig config) {
+<span class="nc" id="L253">            String splitBy = &quot;$&quot;;</span>
+<span class="nc bnc" id="L254" title="All 2 branches missed.">            if (targetColumns != null) {</span>
+<span class="nc" id="L255">                boolean needTypeInference = false;</span>
+<span class="nc bnc" id="L256" title="All 2 branches missed.">                for (Map.Entry&lt;String, String&gt; columnField : targetColumns.entrySet()) {</span>
+<span class="nc" id="L257">                    String field = columnField.getValue();</span>
+<span class="nc" id="L258">                    String type = null;</span>
+<span class="nc bnc" id="L259" title="All 2 branches missed.">                    if (field != null) {</span>
+                        // 解析类型
+<span class="nc" id="L261">                        int i = field.indexOf(splitBy);</span>
+<span class="nc bnc" id="L262" title="All 2 branches missed.">                        if (i &gt; -1) {</span>
+<span class="nc" id="L263">                            type = field.substring(i + 1);</span>
+<span class="nc" id="L264">                            field = field.substring(0, i);</span>
+                        }
+                    }
+<span class="nc" id="L267">                    ColumnItem columnItem = new ColumnItem();</span>
+<span class="nc" id="L268">                    columnItem.setColumn(columnField.getKey());</span>
+<span class="nc bnc" id="L269" title="All 2 branches missed.">                    columnItem.setTargetColumn(StringUtils.isBlank(field) ? columnField.getKey() : field);</span>
+
+<span class="nc" id="L271">                    TablestoreFieldType fieldType = SyncUtil.getTablestoreType(type);</span>
+<span class="nc bnc" id="L272" title="All 2 branches missed.">                    if (fieldType == null) {</span>
+<span class="nc" id="L273">                        needTypeInference = true;</span>
+                    }
+<span class="nc" id="L275">                    columnItem.setType(fieldType);</span>
+<span class="nc" id="L276">                    columnItems.put(columnField.getKey(), columnItem);</span>
+<span class="nc" id="L277">                }</span>
+<span class="nc bnc" id="L278" title="All 2 branches missed.">                if (needTypeInference) {</span>
+                    // 认为有field没有配置映射类型，需要进行类型推断
+<span class="nc" id="L280">                    DruidDataSource sourceDS = DatasourceConfig.DATA_SOURCES.get(config.getDataSourceKey());</span>
+
+<span class="nc" id="L282">                    Util.sqlRS(sourceDS, &quot;SELECT * FROM &quot; + SyncUtil.getDbTableName(database, table) + &quot; LIMIT 1 &quot;, rs -&gt; {</span>
+                        try {
+<span class="nc" id="L284">                            ResultSetMetaData rsd = rs.getMetaData();</span>
+<span class="nc" id="L285">                            int columnCount = rsd.getColumnCount();</span>
+<span class="nc" id="L286">                            List&lt;String&gt; columns = new ArrayList&lt;&gt;();</span>
+<span class="nc bnc" id="L287" title="All 2 branches missed.">                            for (int i = 1; i &lt;= columnCount; i++) {</span>
+<span class="nc" id="L288">                                String columnName = rsd.getColumnName(i);</span>
+<span class="nc bnc" id="L289" title="All 4 branches missed.">                                if (columnItems.containsKey(columnName) &amp;&amp; columnItems.get(columnName).getType() == null) {</span>
+<span class="nc" id="L290">                                    int columnType = rsd.getColumnType(i);</span>
+<span class="nc" id="L291">                                    columnItems.get(columnName).setType(SyncUtil.getDefaultTablestoreType(columnType));</span>
+                                }
+                            }
+<span class="nc" id="L294">                            return true;</span>
+<span class="nc" id="L295">                        } catch (Exception e) {</span>
+<span class="nc" id="L296">                            throw new RuntimeException(e);</span>
+                        }
+                    });
+                }
+
+<span class="nc" id="L301">            } else {</span>
+<span class="nc" id="L302">                this.targetColumns = new LinkedHashMap&lt;&gt;();</span>
+            }
+<span class="nc" id="L304">            targetColumnsParsed = new HashMap&lt;&gt;();</span>
+
+<span class="nc" id="L306">            targetColumns.forEach((key, value) -&gt; {</span>
+<span class="nc bnc" id="L307" title="All 2 branches missed.">                if (StringUtils.isEmpty(value)) {</span>
+<span class="nc" id="L308">                    targetColumnsParsed.put(key, key);</span>
+<span class="nc bnc" id="L309" title="All 4 branches missed.">                } else if (value.contains(splitBy) &amp;&amp; columnItems.containsKey(key)) {</span>
+<span class="nc" id="L310">                    targetColumnsParsed.put(key, columnItems.get(key).targetColumn);</span>
+                } else {
+<span class="nc" id="L312">                    targetColumnsParsed.put(key, value);</span>
+                }
+<span class="nc" id="L314">            });</span>
+<span class="nc" id="L315">        }</span>
+
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.3.201901230119</span></div></body></html>

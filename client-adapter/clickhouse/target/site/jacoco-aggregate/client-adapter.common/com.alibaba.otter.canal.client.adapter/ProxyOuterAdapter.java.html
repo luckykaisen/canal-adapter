@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>ProxyOuterAdapter.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">canal client adapter clickhouse module for otter 1.1.8</a> &gt; <a href="../index.html" class="el_bundle">client-adapter.common</a> &gt; <a href="index.source.html" class="el_package">com.alibaba.otter.canal.client.adapter</a> &gt; <span class="el_source">ProxyOuterAdapter.java</span></div><h1>ProxyOuterAdapter.java</h1><pre class="source lang-java linenums">package com.alibaba.otter.canal.client.adapter;
+
+import com.alibaba.otter.canal.client.adapter.support.Dml;
+import com.alibaba.otter.canal.client.adapter.support.EtlResult;
+import com.alibaba.otter.canal.client.adapter.support.OuterAdapterConfig;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+
+public class ProxyOuterAdapter implements OuterAdapter {
+
+    private OuterAdapter outerAdapter;
+
+<span class="nc" id="L14">    public ProxyOuterAdapter(OuterAdapter outerAdapter) {</span>
+<span class="nc" id="L15">        this.outerAdapter = outerAdapter;</span>
+<span class="nc" id="L16">    }</span>
+
+    private ClassLoader changeCL() {
+<span class="nc" id="L19">        ClassLoader cl = Thread.currentThread().getContextClassLoader();</span>
+<span class="nc" id="L20">        Thread.currentThread().setContextClassLoader(outerAdapter.getClass().getClassLoader());</span>
+<span class="nc" id="L21">        return cl;</span>
+    }
+
+    private void revertCL(ClassLoader cl) {
+<span class="nc" id="L25">        Thread.currentThread().setContextClassLoader(cl);</span>
+<span class="nc" id="L26">    }</span>
+
+    @Override
+    public void init(OuterAdapterConfig configuration, Properties envProperties) {
+<span class="nc" id="L30">        ClassLoader cl = changeCL();</span>
+        try {
+<span class="nc" id="L32">            outerAdapter.init(configuration, envProperties);</span>
+        } finally {
+<span class="nc" id="L34">            revertCL(cl);</span>
+        }
+<span class="nc" id="L36">    }</span>
+
+    @Override
+    public void sync(List&lt;Dml&gt; dmls) {
+<span class="nc" id="L40">        ClassLoader cl = changeCL();</span>
+        try {
+<span class="nc" id="L42">            outerAdapter.sync(dmls);</span>
+        } finally {
+<span class="nc" id="L44">            revertCL(cl);</span>
+        }
+<span class="nc" id="L46">    }</span>
+
+    @Override
+    public void destroy() {
+<span class="nc" id="L50">        ClassLoader cl = changeCL();</span>
+        try {
+<span class="nc" id="L52">            outerAdapter.destroy();</span>
+        } finally {
+<span class="nc" id="L54">            revertCL(cl);</span>
+        }
+<span class="nc" id="L56">    }</span>
+
+    @Override
+    public EtlResult etl(String task, List&lt;String&gt; params) {
+<span class="nc" id="L60">        ClassLoader cl = changeCL();</span>
+        try {
+<span class="nc" id="L62">            return OuterAdapter.super.etl(task, params);</span>
+        } finally {
+<span class="nc" id="L64">            revertCL(cl);</span>
+        }
+    }
+
+    @Override
+    public Map&lt;String, Object&gt; count(String task) {
+<span class="nc" id="L70">        ClassLoader cl = changeCL();</span>
+        try {
+<span class="nc" id="L72">            return OuterAdapter.super.count(task);</span>
+        } finally {
+<span class="nc" id="L74">            revertCL(cl);</span>
+        }
+    }
+
+    @Override
+    public String getDestination(String task) {
+<span class="nc" id="L80">        ClassLoader cl = changeCL();</span>
+        try {
+<span class="nc" id="L82">            return OuterAdapter.super.getDestination(task);</span>
+        } finally {
+<span class="nc" id="L84">            revertCL(cl);</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.3.201901230119</span></div></body></html>

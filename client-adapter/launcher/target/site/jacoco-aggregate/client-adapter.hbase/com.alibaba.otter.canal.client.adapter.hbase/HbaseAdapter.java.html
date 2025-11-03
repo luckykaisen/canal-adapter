@@ -1,0 +1,270 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>HbaseAdapter.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">canal client adapter launcher module for otter 1.1.8</a> &gt; <a href="../index.html" class="el_bundle">client-adapter.hbase</a> &gt; <a href="index.source.html" class="el_package">com.alibaba.otter.canal.client.adapter.hbase</a> &gt; <span class="el_source">HbaseAdapter.java</span></div><h1>HbaseAdapter.java</h1><pre class="source lang-java linenums">package com.alibaba.otter.canal.client.adapter.hbase;
+
+import com.alibaba.otter.canal.client.adapter.OuterAdapter;
+import com.alibaba.otter.canal.client.adapter.hbase.config.MappingConfig;
+import com.alibaba.otter.canal.client.adapter.hbase.config.MappingConfigLoader;
+import com.alibaba.otter.canal.client.adapter.hbase.monitor.HbaseConfigMonitor;
+import com.alibaba.otter.canal.client.adapter.hbase.service.HbaseEtlService;
+import com.alibaba.otter.canal.client.adapter.hbase.service.HbaseSyncService;
+import com.alibaba.otter.canal.client.adapter.hbase.support.HbaseTemplate;
+import com.alibaba.otter.canal.client.adapter.support.Dml;
+import com.alibaba.otter.canal.client.adapter.support.EtlResult;
+import com.alibaba.otter.canal.client.adapter.support.FileName2KeyMapping;
+import com.alibaba.otter.canal.client.adapter.support.OuterAdapterConfig;
+import com.alibaba.otter.canal.client.adapter.support.SPI;
+import com.alibaba.otter.canal.client.adapter.support.Util;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.concurrent.ConcurrentHashMap;
+import org.apache.commons.lang.StringUtils;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.HTable;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.ResultScanner;
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * HBase外部适配器
+ *
+ * @author machengyuan 2018-8-21 下午8:45:38
+ * @version 1.0.0
+ */
+@SPI(&quot;hbase&quot;)
+<span class="nc" id="L42">public class HbaseAdapter implements OuterAdapter {</span>
+
+<span class="nc" id="L44">    private static Logger                           logger             = LoggerFactory.getLogger(HbaseAdapter.class);</span>
+
+<span class="nc" id="L46">    private Map&lt;String, MappingConfig&gt;              hbaseMapping       = new ConcurrentHashMap&lt;&gt;();                  // 文件名对应配置</span>
+<span class="nc" id="L47">    private Map&lt;String, Map&lt;String, MappingConfig&gt;&gt; mappingConfigCache = new ConcurrentHashMap&lt;&gt;();                  // 库名-表名对应配置</span>
+
+    private HbaseSyncService                        hbaseSyncService;
+    private HbaseTemplate                           hbaseTemplate;
+
+    private HbaseConfigMonitor                      configMonitor;
+
+    private Properties                              envProperties;
+
+    private OuterAdapterConfig                      configuration;
+
+    public Map&lt;String, MappingConfig&gt; getHbaseMapping() {
+<span class="nc" id="L59">        return hbaseMapping;</span>
+    }
+
+    public Map&lt;String, Map&lt;String, MappingConfig&gt;&gt; getMappingConfigCache() {
+<span class="nc" id="L63">        return mappingConfigCache;</span>
+    }
+
+    @Override
+    public void init(OuterAdapterConfig configuration, Properties envProperties) {
+        try {
+<span class="nc" id="L69">            this.envProperties = envProperties;</span>
+<span class="nc" id="L70">            this.configuration = configuration;</span>
+<span class="nc" id="L71">            Map&lt;String, MappingConfig&gt; hbaseMappingTmp = MappingConfigLoader.load(envProperties);</span>
+            // 过滤不匹配的key的配置
+<span class="nc" id="L73">            hbaseMappingTmp.forEach((key, config) -&gt; {</span>
+<span class="nc" id="L74">                addConfig(key, config);</span>
+<span class="nc" id="L75">            });</span>
+
+<span class="nc" id="L77">            Map&lt;String, String&gt; properties = configuration.getProperties();</span>
+
+<span class="nc" id="L79">            Configuration hbaseConfig = HBaseConfiguration.create();</span>
+<span class="nc" id="L80">            properties.forEach(hbaseConfig::set);</span>
+<span class="nc" id="L81">            hbaseTemplate = new HbaseTemplate(hbaseConfig);</span>
+<span class="nc" id="L82">            hbaseSyncService = new HbaseSyncService(hbaseTemplate);</span>
+
+<span class="nc" id="L84">            configMonitor = new HbaseConfigMonitor();</span>
+<span class="nc" id="L85">            configMonitor.init(this, envProperties);</span>
+<span class="nc" id="L86">        } catch (Exception e) {</span>
+<span class="nc" id="L87">            throw new RuntimeException(e);</span>
+<span class="nc" id="L88">        }</span>
+<span class="nc" id="L89">    }</span>
+
+    @Override
+    public void sync(List&lt;Dml&gt; dmls) {
+<span class="nc bnc" id="L93" title="All 4 branches missed.">        if (dmls == null || dmls.isEmpty()) {</span>
+<span class="nc" id="L94">            return;</span>
+        }
+<span class="nc bnc" id="L96" title="All 2 branches missed.">        for (Dml dml : dmls) {</span>
+<span class="nc" id="L97">            sync(dml);</span>
+<span class="nc" id="L98">        }</span>
+<span class="nc" id="L99">    }</span>
+
+    private void sync(Dml dml) {
+<span class="nc bnc" id="L102" title="All 2 branches missed.">        if (dml == null) {</span>
+<span class="nc" id="L103">            return;</span>
+        }
+<span class="nc" id="L105">        String destination = StringUtils.trimToEmpty(dml.getDestination());</span>
+<span class="nc" id="L106">        String groupId = StringUtils.trimToEmpty(dml.getGroupId());</span>
+<span class="nc" id="L107">        String database = dml.getDatabase();</span>
+<span class="nc" id="L108">        String table = dml.getTable();</span>
+        Map&lt;String, MappingConfig&gt; configMap;
+<span class="nc bnc" id="L110" title="All 4 branches missed.">        if (envProperties != null &amp;&amp; !&quot;tcp&quot;.equalsIgnoreCase(envProperties.getProperty(&quot;canal.conf.mode&quot;))) {</span>
+<span class="nc" id="L111">            configMap = mappingConfigCache.get(destination + &quot;-&quot; + groupId + &quot;_&quot; + database + &quot;-&quot; + table);</span>
+        } else {
+<span class="nc" id="L113">            configMap = mappingConfigCache.get(destination + &quot;_&quot; + database + &quot;-&quot; + table);</span>
+        }
+<span class="nc bnc" id="L115" title="All 2 branches missed.">        if (configMap != null) {</span>
+<span class="nc" id="L116">            List&lt;MappingConfig&gt; configs = new ArrayList&lt;&gt;();</span>
+<span class="nc" id="L117">            configMap.values().forEach(config -&gt; {</span>
+<span class="nc bnc" id="L118" title="All 2 branches missed.">                if (StringUtils.isNotEmpty(config.getGroupId())) {</span>
+<span class="nc bnc" id="L119" title="All 2 branches missed.">                    if (config.getGroupId().equals(dml.getGroupId())) {</span>
+<span class="nc" id="L120">                        configs.add(config);</span>
+                    }
+                } else {
+<span class="nc" id="L123">                    configs.add(config);</span>
+                }
+<span class="nc" id="L125">            });</span>
+<span class="nc bnc" id="L126" title="All 2 branches missed.">            if (!configs.isEmpty()) {</span>
+<span class="nc" id="L127">                configs.forEach(config -&gt; hbaseSyncService.sync(config, dml));</span>
+            }
+        }
+<span class="nc" id="L130">    }</span>
+
+    @Override
+    public EtlResult etl(String task, List&lt;String&gt; params) {
+<span class="nc" id="L134">        EtlResult etlResult = new EtlResult();</span>
+<span class="nc" id="L135">        MappingConfig config = hbaseMapping.get(task);</span>
+<span class="nc" id="L136">        HbaseEtlService hbaseEtlService = new HbaseEtlService(hbaseTemplate, config);</span>
+<span class="nc bnc" id="L137" title="All 2 branches missed.">        if (config != null) {</span>
+<span class="nc" id="L138">            return hbaseEtlService.importData(params);</span>
+        } else {
+<span class="nc" id="L140">            StringBuilder resultMsg = new StringBuilder();</span>
+<span class="nc" id="L141">            boolean resSucc = true;</span>
+<span class="nc bnc" id="L142" title="All 2 branches missed.">            for (MappingConfig configTmp : hbaseMapping.values()) {</span>
+                // 取所有的destination为task的配置
+<span class="nc bnc" id="L144" title="All 2 branches missed.">                if (configTmp.getDestination().equals(task)) {</span>
+<span class="nc" id="L145">                    EtlResult etlRes = hbaseEtlService.importData(params);</span>
+<span class="nc bnc" id="L146" title="All 2 branches missed.">                    if (!etlRes.getSucceeded()) {</span>
+<span class="nc" id="L147">                        resSucc = false;</span>
+<span class="nc" id="L148">                        resultMsg.append(etlRes.getErrorMessage()).append(&quot;\n&quot;);</span>
+                    } else {
+<span class="nc" id="L150">                        resultMsg.append(etlRes.getResultMessage()).append(&quot;\n&quot;);</span>
+                    }
+                }
+<span class="nc" id="L153">            }</span>
+<span class="nc bnc" id="L154" title="All 2 branches missed.">            if (resultMsg.length() &gt; 0) {</span>
+<span class="nc" id="L155">                etlResult.setSucceeded(resSucc);</span>
+<span class="nc bnc" id="L156" title="All 2 branches missed.">                if (resSucc) {</span>
+<span class="nc" id="L157">                    etlResult.setResultMessage(resultMsg.toString());</span>
+                } else {
+<span class="nc" id="L159">                    etlResult.setErrorMessage(resultMsg.toString());</span>
+                }
+<span class="nc" id="L161">                return etlResult;</span>
+            }
+        }
+<span class="nc" id="L164">        etlResult.setSucceeded(false);</span>
+<span class="nc" id="L165">        etlResult.setErrorMessage(&quot;Task not found&quot;);</span>
+<span class="nc" id="L166">        return etlResult;</span>
+    }
+
+    @Override
+    public Map&lt;String, Object&gt; count(String task) {
+<span class="nc" id="L171">        MappingConfig config = hbaseMapping.get(task);</span>
+<span class="nc" id="L172">        String hbaseTable = config.getHbaseMapping().getHbaseTable();</span>
+<span class="nc" id="L173">        long rowCount = 0L;</span>
+        try {
+<span class="nc" id="L175">            HTable table = (HTable) hbaseTemplate.getConnection().getTable(TableName.valueOf(hbaseTable));</span>
+<span class="nc" id="L176">            Scan scan = new Scan();</span>
+<span class="nc" id="L177">            scan.setFilter(new FirstKeyOnlyFilter());</span>
+<span class="nc" id="L178">            ResultScanner resultScanner = table.getScanner(scan);</span>
+<span class="nc bnc" id="L179" title="All 2 branches missed.">            for (Result result : resultScanner) {</span>
+<span class="nc" id="L180">                rowCount += result.size();</span>
+<span class="nc" id="L181">            }</span>
+<span class="nc" id="L182">        } catch (IOException e) {</span>
+<span class="nc" id="L183">            logger.error(e.getMessage(), e);</span>
+<span class="nc" id="L184">        }</span>
+<span class="nc" id="L185">        Map&lt;String, Object&gt; res = new LinkedHashMap&lt;&gt;();</span>
+<span class="nc" id="L186">        res.put(&quot;hbaseTable&quot;, hbaseTable);</span>
+<span class="nc" id="L187">        res.put(&quot;count&quot;, rowCount);</span>
+<span class="nc" id="L188">        return res;</span>
+    }
+
+    @Override
+    public void destroy() {
+<span class="nc bnc" id="L193" title="All 2 branches missed.">        if (configMonitor != null) {</span>
+<span class="nc" id="L194">            configMonitor.destroy();</span>
+        }
+        try {
+<span class="nc" id="L197">            hbaseTemplate.close();</span>
+<span class="nc" id="L198">        } catch (IOException e) {</span>
+<span class="nc" id="L199">            throw new RuntimeException(e);</span>
+<span class="nc" id="L200">        }</span>
+<span class="nc" id="L201">    }</span>
+
+    @Override
+    public String getDestination(String task) {
+<span class="nc" id="L205">        MappingConfig config = hbaseMapping.get(task);</span>
+<span class="nc bnc" id="L206" title="All 4 branches missed.">        if (config != null &amp;&amp; config.getHbaseMapping() != null) {</span>
+<span class="nc" id="L207">            return config.getDestination();</span>
+        }
+<span class="nc" id="L209">        return null;</span>
+    }
+
+    private void addSyncConfigToCache(String configName, MappingConfig mappingConfig) {
+        String k;
+<span class="nc bnc" id="L214" title="All 2 branches missed.">        if (envProperties != null &amp;&amp; !&quot;tcp&quot;</span>
+<span class="nc bnc" id="L215" title="All 2 branches missed.">                .equalsIgnoreCase(envProperties.getProperty(&quot;canal.conf.mode&quot;))) {</span>
+<span class="nc" id="L216">            k = StringUtils.trimToEmpty(mappingConfig.getDestination()) + &quot;-&quot; + StringUtils</span>
+<span class="nc" id="L217">                    .trimToEmpty(mappingConfig.getGroupId()) + &quot;_&quot; + mappingConfig.getHbaseMapping()</span>
+<span class="nc" id="L218">                    .getDatabase() + &quot;-&quot; + mappingConfig.getHbaseMapping().getTable();</span>
+        } else {
+<span class="nc" id="L220">            k = StringUtils.trimToEmpty(mappingConfig.getDestination()) + &quot;_&quot; + mappingConfig</span>
+<span class="nc" id="L221">                    .getHbaseMapping().getDatabase() + &quot;-&quot; + mappingConfig.getHbaseMapping()</span>
+<span class="nc" id="L222">                    .getTable();</span>
+        }
+<span class="nc" id="L224">        Map&lt;String, MappingConfig&gt; configMap = mappingConfigCache</span>
+<span class="nc" id="L225">                .computeIfAbsent(k, k1 -&gt; new ConcurrentHashMap&lt;&gt;());</span>
+<span class="nc" id="L226">        configMap.put(configName, mappingConfig);</span>
+<span class="nc" id="L227">    }</span>
+
+    public boolean addConfig(String fileName, MappingConfig config) {
+<span class="nc bnc" id="L230" title="All 2 branches missed.">        if (match(config)) {</span>
+<span class="nc" id="L231">            hbaseMapping.put(fileName, config);</span>
+<span class="nc" id="L232">            addSyncConfigToCache(fileName, config);</span>
+<span class="nc" id="L233">            FileName2KeyMapping.register(getClass().getAnnotation(SPI.class).value(), fileName,</span>
+<span class="nc" id="L234">                    configuration.getKey());</span>
+<span class="nc" id="L235">            return true;</span>
+        }
+<span class="nc" id="L237">        return false;</span>
+    }
+
+    public void updateConfig(String fileName, MappingConfig config) {
+<span class="nc bnc" id="L241" title="All 2 branches missed.">        if (config.getOuterAdapterKey() != null &amp;&amp; !config.getOuterAdapterKey()</span>
+<span class="nc bnc" id="L242" title="All 2 branches missed.">                .equals(configuration.getKey())) {</span>
+            // 理论上不允许改这个 因为本身就是通过这个关联起Adapter和Config的
+<span class="nc" id="L244">            throw new RuntimeException(&quot;not allow to change outAdapterKey&quot;);</span>
+        }
+<span class="nc" id="L246">        hbaseMapping.put(fileName, config);</span>
+<span class="nc" id="L247">        addSyncConfigToCache(fileName, config);</span>
+<span class="nc" id="L248">    }</span>
+
+    public void deleteConfig(String fileName) {
+<span class="nc" id="L251">        hbaseMapping.remove(fileName);</span>
+<span class="nc bnc" id="L252" title="All 2 branches missed.">        for (Map&lt;String, MappingConfig&gt; configMap : mappingConfigCache.values()) {</span>
+<span class="nc bnc" id="L253" title="All 2 branches missed.">            if (configMap != null) {</span>
+<span class="nc" id="L254">                configMap.remove(fileName);</span>
+            }
+<span class="nc" id="L256">        }</span>
+<span class="nc" id="L257">        FileName2KeyMapping.unregister(getClass().getAnnotation(SPI.class).value(), fileName);</span>
+<span class="nc" id="L258">    }</span>
+
+    private boolean match(MappingConfig config) {
+<span class="nc bnc" id="L261" title="All 2 branches missed.">        boolean sameMatch = config.getOuterAdapterKey() != null &amp;&amp; config.getOuterAdapterKey()</span>
+<span class="nc bnc" id="L262" title="All 2 branches missed.">                .equalsIgnoreCase(configuration.getKey());</span>
+<span class="nc bnc" id="L263" title="All 2 branches missed.">        boolean prefixMatch = config.getOuterAdapterKey() == null &amp;&amp; configuration.getKey()</span>
+<span class="nc bnc" id="L264" title="All 2 branches missed.">                .startsWith(StringUtils</span>
+<span class="nc" id="L265">                        .join(new String[]{Util.AUTO_GENERATED_PREFIX, config.getDestination(),</span>
+<span class="nc" id="L266">                                config.getGroupId()}, '-'));</span>
+<span class="nc bnc" id="L267" title="All 4 branches missed.">        return sameMatch || prefixMatch;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.3.201901230119</span></div></body></html>

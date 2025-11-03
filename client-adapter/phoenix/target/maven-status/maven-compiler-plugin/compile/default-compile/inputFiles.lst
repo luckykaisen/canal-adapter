@@ -1,0 +1,12 @@
+/Users/kc/Downloads/canal-canal-1.1.8_new/client-adapter/phoenix/src/main/java/com/alibaba/otter/canal/client/adapter/phoenix/monitor/PhoenixConfigMonitor.java
+/Users/kc/Downloads/canal-canal-1.1.8_new/client-adapter/phoenix/src/main/java/com/alibaba/otter/canal/client/adapter/phoenix/support/PhoenixSupportUtil.java
+/Users/kc/Downloads/canal-canal-1.1.8_new/client-adapter/phoenix/src/main/java/com/alibaba/otter/canal/client/adapter/phoenix/service/PhoenixSyncService.java
+/Users/kc/Downloads/canal-canal-1.1.8_new/client-adapter/phoenix/src/main/java/com/alibaba/otter/canal/client/adapter/phoenix/service/PhoenixEtlService.java
+/Users/kc/Downloads/canal-canal-1.1.8_new/client-adapter/phoenix/src/main/java/com/alibaba/otter/canal/client/adapter/phoenix/config/ConfigurationManager.java
+/Users/kc/Downloads/canal-canal-1.1.8_new/client-adapter/phoenix/src/main/java/com/alibaba/otter/canal/client/adapter/phoenix/config/MappingConfig.java
+/Users/kc/Downloads/canal-canal-1.1.8_new/client-adapter/phoenix/src/main/java/com/alibaba/otter/canal/client/adapter/phoenix/support/SingleDml.java
+/Users/kc/Downloads/canal-canal-1.1.8_new/client-adapter/phoenix/src/main/java/com/alibaba/otter/canal/client/adapter/phoenix/support/SyncUtil.java
+/Users/kc/Downloads/canal-canal-1.1.8_new/client-adapter/phoenix/src/main/java/com/alibaba/otter/canal/client/adapter/phoenix/support/TypeUtil.java
+/Users/kc/Downloads/canal-canal-1.1.8_new/client-adapter/phoenix/src/main/java/com/alibaba/otter/canal/client/adapter/phoenix/support/BatchExecutor.java
+/Users/kc/Downloads/canal-canal-1.1.8_new/client-adapter/phoenix/src/main/java/com/alibaba/otter/canal/client/adapter/phoenix/PhoenixAdapter.java
+/Users/kc/Downloads/canal-canal-1.1.8_new/client-adapter/phoenix/src/main/java/com/alibaba/otter/canal/client/adapter/phoenix/config/ConfigLoader.java

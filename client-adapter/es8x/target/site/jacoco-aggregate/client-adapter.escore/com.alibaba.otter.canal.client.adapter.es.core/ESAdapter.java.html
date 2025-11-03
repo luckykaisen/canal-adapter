@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>ESAdapter.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">canal client adapter es v8x module for otter 1.1.8</a> &gt; <a href="../index.html" class="el_bundle">client-adapter.escore</a> &gt; <a href="index.source.html" class="el_package">com.alibaba.otter.canal.client.adapter.es.core</a> &gt; <span class="el_source">ESAdapter.java</span></div><h1>ESAdapter.java</h1><pre class="source lang-java linenums">package com.alibaba.otter.canal.client.adapter.es.core;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import org.apache.commons.lang.StringUtils;
+
+import com.alibaba.druid.pool.DruidDataSource;
+import com.alibaba.otter.canal.client.adapter.OuterAdapter;
+import com.alibaba.otter.canal.client.adapter.es.core.config.ESSyncConfig;
+import com.alibaba.otter.canal.client.adapter.es.core.config.ESSyncConfigLoader;
+import com.alibaba.otter.canal.client.adapter.es.core.config.SchemaItem;
+import com.alibaba.otter.canal.client.adapter.es.core.config.SqlParser;
+import com.alibaba.otter.canal.client.adapter.es.core.monitor.ESConfigMonitor;
+import com.alibaba.otter.canal.client.adapter.es.core.service.ESSyncService;
+import com.alibaba.otter.canal.client.adapter.es.core.support.ESTemplate;
+import com.alibaba.otter.canal.client.adapter.support.*;
+
+/**
+ * ES外部适配器
+ *
+ * @author rewerma 2018-10-20
+ * @version 1.0.0
+ */
+<span class="nc" id="L29">public abstract class ESAdapter implements OuterAdapter {</span>
+
+<span class="nc" id="L31">    protected Map&lt;String, ESSyncConfig&gt;              esSyncConfig        = new ConcurrentHashMap&lt;&gt;(); // 文件名对应配置</span>
+<span class="nc" id="L32">    protected Map&lt;String, Map&lt;String, ESSyncConfig&gt;&gt; dbTableEsSyncConfig = new ConcurrentHashMap&lt;&gt;(); // schema-table对应配置</span>
+
+    protected ESTemplate                             esTemplate;
+
+    protected ESSyncService                          esSyncService;
+
+    protected ESConfigMonitor                        esConfigMonitor;
+
+    protected Properties                             envProperties;
+
+    protected OuterAdapterConfig                     configuration;
+
+    public ESSyncService getEsSyncService() {
+<span class="nc" id="L45">        return esSyncService;</span>
+    }
+
+    public Map&lt;String, ESSyncConfig&gt; getEsSyncConfig() {
+<span class="nc" id="L49">        return esSyncConfig;</span>
+    }
+
+    public Map&lt;String, Map&lt;String, ESSyncConfig&gt;&gt; getDbTableEsSyncConfig() {
+<span class="nc" id="L53">        return dbTableEsSyncConfig;</span>
+    }
+
+    @Override
+    public void init(OuterAdapterConfig configuration, Properties envProperties) {
+        try {
+<span class="nc" id="L59">            this.envProperties = envProperties;</span>
+<span class="nc" id="L60">            this.configuration = configuration;</span>
+<span class="nc" id="L61">            Map&lt;String, ESSyncConfig&gt; esSyncConfigTmp = ESSyncConfigLoader.load(envProperties);</span>
+            // 过滤不匹配的key的配置
+<span class="nc" id="L63">            esSyncConfigTmp.forEach((key, config) -&gt; {</span>
+<span class="nc" id="L64">                addConfig(key, config);</span>
+<span class="nc" id="L65">            });</span>
+
+<span class="nc" id="L67">            esSyncService = new ESSyncService(esTemplate);</span>
+
+<span class="nc" id="L69">            esConfigMonitor = new ESConfigMonitor();</span>
+<span class="nc" id="L70">            esConfigMonitor.init(this, envProperties);</span>
+<span class="nc" id="L71">        } catch (Throwable e) {</span>
+<span class="nc" id="L72">            throw new RuntimeException(e);</span>
+<span class="nc" id="L73">        }</span>
+<span class="nc" id="L74">    }</span>
+
+    @Override
+    public void sync(List&lt;Dml&gt; dmls) {
+<span class="nc bnc" id="L78" title="All 4 branches missed.">        if (dmls == null || dmls.isEmpty()) {</span>
+<span class="nc" id="L79">            return;</span>
+        }
+<span class="nc bnc" id="L81" title="All 2 branches missed.">        for (Dml dml : dmls) {</span>
+<span class="nc bnc" id="L82" title="All 2 branches missed.">            if (!dml.getIsDdl()) {</span>
+<span class="nc" id="L83">                sync(dml);</span>
+            }
+<span class="nc" id="L85">        }</span>
+<span class="nc" id="L86">        esSyncService.commit(); // 批次统一提交</span>
+
+<span class="nc" id="L88">    }</span>
+
+    private void sync(Dml dml) {
+<span class="nc" id="L91">        String database = dml.getDatabase();</span>
+<span class="nc" id="L92">        String table = dml.getTable();</span>
+        Map&lt;String, ESSyncConfig&gt; configMap;
+<span class="nc bnc" id="L94" title="All 4 branches missed.">        if (envProperties != null &amp;&amp; !&quot;tcp&quot;.equalsIgnoreCase(envProperties.getProperty(&quot;canal.conf.mode&quot;))) {</span>
+<span class="nc" id="L95">            configMap = dbTableEsSyncConfig</span>
+<span class="nc" id="L96">                .get(StringUtils.trimToEmpty(dml.getDestination()) + &quot;-&quot; + StringUtils.trimToEmpty(dml.getGroupId())</span>
+                     + &quot;_&quot; + database + &quot;-&quot; + table);
+        } else {
+<span class="nc" id="L99">            configMap = dbTableEsSyncConfig</span>
+<span class="nc" id="L100">                .get(StringUtils.trimToEmpty(dml.getDestination()) + &quot;_&quot; + database + &quot;-&quot; + table);</span>
+        }
+
+<span class="nc bnc" id="L103" title="All 4 branches missed.">        if (configMap != null &amp;&amp; !configMap.values().isEmpty()) {</span>
+<span class="nc" id="L104">            esSyncService.sync(configMap.values(), dml);</span>
+        }
+<span class="nc" id="L106">    }</span>
+
+    @Override
+    public abstract EtlResult etl(String task, List&lt;String&gt; params);
+
+    @Override
+    public abstract Map&lt;String, Object&gt; count(String task);
+
+    @Override
+    public void destroy() {
+<span class="nc bnc" id="L116" title="All 2 branches missed.">        if (esConfigMonitor != null) {</span>
+<span class="nc" id="L117">            esConfigMonitor.destroy();</span>
+        }
+<span class="nc" id="L119">    }</span>
+
+    @Override
+    public String getDestination(String task) {
+<span class="nc" id="L123">        ESSyncConfig config = esSyncConfig.get(task);</span>
+<span class="nc bnc" id="L124" title="All 2 branches missed.">        if (config != null) {</span>
+<span class="nc" id="L125">            return config.getDestination();</span>
+        }
+<span class="nc" id="L127">        return null;</span>
+    }
+
+    private void addSyncConfigToCache(String configName, ESSyncConfig config) {
+<span class="nc" id="L131">        Properties envProperties = this.envProperties;</span>
+<span class="nc" id="L132">        SchemaItem schemaItem = SqlParser.parse(config.getEsMapping().getSql());</span>
+<span class="nc" id="L133">        config.getEsMapping().setSchemaItem(schemaItem);</span>
+
+<span class="nc" id="L135">        DruidDataSource dataSource = DatasourceConfig.DATA_SOURCES.get(config.getDataSourceKey());</span>
+<span class="nc bnc" id="L136" title="All 4 branches missed.">        if (dataSource == null || dataSource.getUrl() == null) {</span>
+<span class="nc" id="L137">            throw new RuntimeException(&quot;No data source found: &quot; + config.getDataSourceKey());</span>
+        }
+<span class="nc" id="L139">        Pattern pattern = Pattern.compile(&quot;.*:(.*)://.*/(.*)\\?.*$&quot;);</span>
+<span class="nc" id="L140">        Matcher matcher = pattern.matcher(dataSource.getUrl());</span>
+<span class="nc bnc" id="L141" title="All 2 branches missed.">        if (!matcher.find()) {</span>
+<span class="nc" id="L142">            throw new RuntimeException(&quot;Not found the schema of jdbc-url: &quot; + config.getDataSourceKey());</span>
+        }
+<span class="nc" id="L144">        String schema = matcher.group(2);</span>
+<span class="nc" id="L145">        schemaItem.getAliasTableItems().values().forEach(tableItem -&gt; {</span>
+            Map&lt;String, ESSyncConfig&gt; esSyncConfigMap;
+<span class="nc bnc" id="L147" title="All 2 branches missed.">            String schemaKey = tableItem.getSchema() == null ? schema : tableItem.getSchema();</span>
+<span class="nc bnc" id="L148" title="All 4 branches missed.">            if (envProperties != null &amp;&amp; !&quot;tcp&quot;.equalsIgnoreCase(envProperties.getProperty(&quot;canal.conf.mode&quot;))) {</span>
+<span class="nc" id="L149">                esSyncConfigMap = dbTableEsSyncConfig</span>
+<span class="nc" id="L150">                    .computeIfAbsent(StringUtils.trimToEmpty(config.getDestination()) + &quot;-&quot;</span>
+<span class="nc" id="L151">                                     + StringUtils.trimToEmpty(config.getGroupId()) + &quot;_&quot; + schemaKey + &quot;-&quot;</span>
+<span class="nc" id="L152">                                     + tableItem.getTableName(),</span>
+<span class="nc" id="L153">                        k -&gt; new ConcurrentHashMap&lt;&gt;());</span>
+            } else {
+<span class="nc" id="L155">                esSyncConfigMap = dbTableEsSyncConfig.computeIfAbsent(</span>
+<span class="nc" id="L156">                    StringUtils.trimToEmpty(config.getDestination()) + &quot;_&quot; + schemaKey + &quot;-&quot; + tableItem.getTableName(),</span>
+<span class="nc" id="L157">                    k -&gt; new ConcurrentHashMap&lt;&gt;());</span>
+            }
+
+<span class="nc" id="L160">            esSyncConfigMap.put(configName, config);</span>
+<span class="nc" id="L161">        });</span>
+<span class="nc" id="L162">    }</span>
+
+    public boolean addConfig(String fileName, ESSyncConfig config) {
+<span class="nc bnc" id="L165" title="All 2 branches missed.">        if (match(config)) {</span>
+<span class="nc" id="L166">            esSyncConfig.put(fileName, config);</span>
+<span class="nc" id="L167">            addSyncConfigToCache(fileName, config);</span>
+<span class="nc" id="L168">            FileName2KeyMapping.register(getClass().getAnnotation(SPI.class).value(), fileName, configuration.getKey());</span>
+<span class="nc" id="L169">            return true;</span>
+        }
+<span class="nc" id="L171">        return false;</span>
+    }
+
+    public void updateConfig(String fileName, ESSyncConfig config) {
+<span class="nc bnc" id="L175" title="All 4 branches missed.">        if (config.getOuterAdapterKey() != null &amp;&amp; !config.getOuterAdapterKey().equals(configuration.getKey())) {</span>
+            // 理论上不允许改这个 因为本身就是通过这个关联起Adapter和Config的
+<span class="nc" id="L177">            throw new RuntimeException(&quot;not allow to change outAdapterKey&quot;);</span>
+        }
+<span class="nc" id="L179">        esSyncConfig.put(fileName, config);</span>
+<span class="nc" id="L180">        addSyncConfigToCache(fileName, config);</span>
+<span class="nc" id="L181">    }</span>
+
+    public void deleteConfig(String fileName) {
+<span class="nc" id="L184">        esSyncConfig.remove(fileName);</span>
+<span class="nc bnc" id="L185" title="All 2 branches missed.">        for (Map&lt;String, ESSyncConfig&gt; configMap : dbTableEsSyncConfig.values()) {</span>
+<span class="nc bnc" id="L186" title="All 2 branches missed.">            if (configMap != null) {</span>
+<span class="nc" id="L187">                configMap.remove(fileName);</span>
+            }
+<span class="nc" id="L189">        }</span>
+<span class="nc" id="L190">        FileName2KeyMapping.unregister(getClass().getAnnotation(SPI.class).value(), fileName);</span>
+<span class="nc" id="L191">    }</span>
+
+    private boolean match(ESSyncConfig config) {
+<span class="nc bnc" id="L194" title="All 2 branches missed.">        boolean sameMatch = config.getOuterAdapterKey() != null</span>
+<span class="nc bnc" id="L195" title="All 2 branches missed.">                            &amp;&amp; config.getOuterAdapterKey().equalsIgnoreCase(configuration.getKey());</span>
+<span class="nc bnc" id="L196" title="All 2 branches missed.">        boolean prefixMatch = config.getOuterAdapterKey() == null &amp;&amp; configuration.getKey()</span>
+<span class="nc bnc" id="L197" title="All 2 branches missed.">            .startsWith(StringUtils</span>
+<span class="nc" id="L198">                .join(new String[] { Util.AUTO_GENERATED_PREFIX, config.getDestination(), config.getGroupId() }, '-'));</span>
+<span class="nc bnc" id="L199" title="All 4 branches missed.">        return sameMatch || prefixMatch;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.3.201901230119</span></div></body></html>

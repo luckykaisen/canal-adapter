@@ -1,0 +1,6 @@
+com.alibaba.otter.canal.client.adapter.tablestore
+com.alibaba.otter.canal.client.adapter.tablestore.common
+com.alibaba.otter.canal.client.adapter.tablestore.config
+com.alibaba.otter.canal.client.adapter.tablestore.enums
+com.alibaba.otter.canal.client.adapter.tablestore.service
+com.alibaba.otter.canal.client.adapter.tablestore.support

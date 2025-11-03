@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>ES8xAdapter.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">canal client adapter launcher module for otter 1.1.8</a> &gt; <a href="../index.html" class="el_bundle">client-adapter.es8x</a> &gt; <a href="index.source.html" class="el_package">com.alibaba.otter.canal.client.adapter.es8x</a> &gt; <span class="el_source">ES8xAdapter.java</span></div><h1>ES8xAdapter.java</h1><pre class="source lang-java linenums">package com.alibaba.otter.canal.client.adapter.es8x;
+
+import com.alibaba.otter.canal.client.adapter.es.core.ESAdapter;
+import com.alibaba.otter.canal.client.adapter.es.core.config.ESSyncConfig;
+import com.alibaba.otter.canal.client.adapter.es8x.etl.ESEtlService;
+import com.alibaba.otter.canal.client.adapter.es8x.support.ES8xTemplate;
+import com.alibaba.otter.canal.client.adapter.es8x.support.ESConnection;
+import com.alibaba.otter.canal.client.adapter.support.DatasourceConfig;
+import com.alibaba.otter.canal.client.adapter.support.EtlResult;
+import com.alibaba.otter.canal.client.adapter.support.OuterAdapterConfig;
+import com.alibaba.otter.canal.client.adapter.support.SPI;
+import org.elasticsearch.action.search.SearchResponse;
+
+import javax.sql.DataSource;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+
+/**
+ * ES 8.x 外部适配器
+ *
+ * @author ymz 2013-02-23
+ * @version 1.0.0
+ */
+@SPI(&quot;es8&quot;)
+<span class="nc" id="L27">public class ES8xAdapter extends ESAdapter {</span>
+
+    private ESConnection esConnection;
+
+    public ESConnection getEsConnection() {
+<span class="nc" id="L32">        return esConnection;</span>
+    }
+
+    @Override
+    public void init(OuterAdapterConfig configuration, Properties envProperties) {
+        try {
+<span class="nc" id="L38">            Map&lt;String, String&gt; properties = configuration.getProperties();</span>
+
+<span class="nc" id="L40">            String[] hostArray = configuration.getHosts().split(&quot;,&quot;);</span>
+<span class="nc" id="L41">            esConnection = new ESConnection(hostArray, properties);</span>
+
+<span class="nc" id="L43">            this.esTemplate = new ES8xTemplate(esConnection);</span>
+
+<span class="nc" id="L45">            envProperties.put(&quot;es.version&quot;, &quot;es8&quot;);</span>
+<span class="nc" id="L46">            super.init(configuration, envProperties);</span>
+<span class="nc" id="L47">        } catch (Throwable e) {</span>
+<span class="nc" id="L48">            throw new RuntimeException(e);</span>
+<span class="nc" id="L49">        }</span>
+<span class="nc" id="L50">    }</span>
+
+    @Override
+    public Map&lt;String, Object&gt; count(String task) {
+<span class="nc" id="L54">        ESSyncConfig config = esSyncConfig.get(task);</span>
+<span class="nc" id="L55">        ESSyncConfig.ESMapping mapping = config.getEsMapping();</span>
+<span class="nc" id="L56">        SearchResponse response = this.esConnection.new ESSearchRequest(mapping.getIndex()).size(0).getResponse();</span>
+
+<span class="nc" id="L58">        long rowCount = response.getHits().getTotalHits().value;</span>
+<span class="nc" id="L59">        Map&lt;String, Object&gt; res = new LinkedHashMap&lt;&gt;();</span>
+<span class="nc" id="L60">        res.put(&quot;esIndex&quot;, mapping.getIndex());</span>
+<span class="nc" id="L61">        res.put(&quot;count&quot;, rowCount);</span>
+<span class="nc" id="L62">        return res;</span>
+    }
+
+    @Override
+    public EtlResult etl(String task, List&lt;String&gt; params) {
+<span class="nc" id="L67">        EtlResult etlResult = new EtlResult();</span>
+<span class="nc" id="L68">        ESSyncConfig config = esSyncConfig.get(task);</span>
+<span class="nc bnc" id="L69" title="All 2 branches missed.">        if (config != null) {</span>
+<span class="nc" id="L70">            DataSource dataSource = DatasourceConfig.DATA_SOURCES.get(config.getDataSourceKey());</span>
+<span class="nc" id="L71">            ESEtlService esEtlService = new ESEtlService(esConnection, config);</span>
+<span class="nc bnc" id="L72" title="All 2 branches missed.">            if (dataSource != null) {</span>
+<span class="nc" id="L73">                return esEtlService.importData(params);</span>
+            } else {
+<span class="nc" id="L75">                etlResult.setSucceeded(false);</span>
+<span class="nc" id="L76">                etlResult.setErrorMessage(&quot;DataSource not found&quot;);</span>
+<span class="nc" id="L77">                return etlResult;</span>
+            }
+        } else {
+<span class="nc" id="L80">            StringBuilder resultMsg = new StringBuilder();</span>
+<span class="nc" id="L81">            boolean resSuccess = true;</span>
+<span class="nc bnc" id="L82" title="All 2 branches missed.">            for (ESSyncConfig configTmp : esSyncConfig.values()) {</span>
+                // 取所有的destination为task的配置
+<span class="nc bnc" id="L84" title="All 2 branches missed.">                if (configTmp.getDestination().equals(task)) {</span>
+<span class="nc" id="L85">                    ESEtlService esEtlService = new ESEtlService(esConnection, configTmp);</span>
+<span class="nc" id="L86">                    EtlResult etlRes = esEtlService.importData(params);</span>
+<span class="nc bnc" id="L87" title="All 2 branches missed.">                    if (!etlRes.getSucceeded()) {</span>
+<span class="nc" id="L88">                        resSuccess = false;</span>
+<span class="nc" id="L89">                        resultMsg.append(etlRes.getErrorMessage()).append(&quot;\n&quot;);</span>
+                    } else {
+<span class="nc" id="L91">                        resultMsg.append(etlRes.getResultMessage()).append(&quot;\n&quot;);</span>
+                    }
+                }
+<span class="nc" id="L94">            }</span>
+<span class="nc bnc" id="L95" title="All 2 branches missed.">            if (resultMsg.length() &gt; 0) {</span>
+<span class="nc" id="L96">                etlResult.setSucceeded(resSuccess);</span>
+<span class="nc bnc" id="L97" title="All 2 branches missed.">                if (resSuccess) {</span>
+<span class="nc" id="L98">                    etlResult.setResultMessage(resultMsg.toString());</span>
+                } else {
+<span class="nc" id="L100">                    etlResult.setErrorMessage(resultMsg.toString());</span>
+                }
+<span class="nc" id="L102">                return etlResult;</span>
+            }
+        }
+<span class="nc" id="L105">        etlResult.setSucceeded(false);</span>
+<span class="nc" id="L106">        etlResult.setErrorMessage(&quot;Task not found&quot;);</span>
+<span class="nc" id="L107">        return etlResult;</span>
+    }
+
+    @Override
+    public void destroy() {
+<span class="nc" id="L112">        super.destroy();</span>
+<span class="nc bnc" id="L113" title="All 2 branches missed.">        if (esConnection != null) {</span>
+<span class="nc" id="L114">            esConnection.close();</span>
+        }
+<span class="nc" id="L116">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.3.201901230119</span></div></body></html>

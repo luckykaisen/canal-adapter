@@ -1,0 +1,7 @@
+com.alibaba.otter.canal.adapter.launcher
+com.alibaba.otter.canal.adapter.launcher.common
+com.alibaba.otter.canal.adapter.launcher.config
+com.alibaba.otter.canal.adapter.launcher.loader
+com.alibaba.otter.canal.adapter.launcher.monitor
+com.alibaba.otter.canal.adapter.launcher.monitor.remote
+com.alibaba.otter.canal.adapter.launcher.rest

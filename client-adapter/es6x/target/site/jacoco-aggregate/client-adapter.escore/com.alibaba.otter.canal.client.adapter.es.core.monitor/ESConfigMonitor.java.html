@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>ESConfigMonitor.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">canal client adapter es v6x module for otter 1.1.8</a> &gt; <a href="../index.html" class="el_bundle">client-adapter.escore</a> &gt; <a href="index.source.html" class="el_package">com.alibaba.otter.canal.client.adapter.es.core.monitor</a> &gt; <span class="el_source">ESConfigMonitor.java</span></div><h1>ESConfigMonitor.java</h1><pre class="source lang-java linenums">package com.alibaba.otter.canal.client.adapter.es.core.monitor;
+
+import java.io.File;
+import java.util.Properties;
+
+import org.apache.commons.io.filefilter.FileFilterUtils;
+import org.apache.commons.io.monitor.FileAlterationListenerAdaptor;
+import org.apache.commons.io.monitor.FileAlterationMonitor;
+import org.apache.commons.io.monitor.FileAlterationObserver;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.alibaba.otter.canal.client.adapter.es.core.ESAdapter;
+import com.alibaba.otter.canal.client.adapter.es.core.config.ESSyncConfig;
+import com.alibaba.otter.canal.client.adapter.support.MappingConfigsLoader;
+import com.alibaba.otter.canal.client.adapter.support.Util;
+import com.alibaba.otter.canal.client.adapter.support.YamlUtils;
+
+;
+
+<span class="nc" id="L21">public class ESConfigMonitor {</span>
+
+<span class="nc" id="L23">    private static final Logger   logger = LoggerFactory.getLogger(ESConfigMonitor.class);</span>
+
+    private String                adapterName;
+
+    private ESAdapter             esAdapter;
+
+    private Properties            envProperties;
+
+    private FileAlterationMonitor fileMonitor;
+
+    public void init(ESAdapter esAdapter, Properties envProperties) {
+<span class="nc" id="L34">        this.esAdapter = esAdapter;</span>
+<span class="nc" id="L35">        this.envProperties = envProperties;</span>
+<span class="nc" id="L36">        this.adapterName = envProperties.getProperty(&quot;es.version&quot;);</span>
+<span class="nc" id="L37">        File confDir = Util.getConfDirPath(adapterName);</span>
+        try {
+<span class="nc" id="L39">            FileAlterationObserver observer = new FileAlterationObserver(confDir,</span>
+<span class="nc" id="L40">                    FileFilterUtils.and(FileFilterUtils.fileFileFilter(), FileFilterUtils.suffixFileFilter(&quot;yml&quot;)));</span>
+<span class="nc" id="L41">            FileListener listener = new FileListener();</span>
+<span class="nc" id="L42">            observer.addListener(listener);</span>
+<span class="nc" id="L43">            fileMonitor = new FileAlterationMonitor(3000, observer);</span>
+<span class="nc" id="L44">            fileMonitor.start();</span>
+
+<span class="nc" id="L46">        } catch (Exception e) {</span>
+<span class="nc" id="L47">            logger.error(e.getMessage(), e);</span>
+<span class="nc" id="L48">        }</span>
+<span class="nc" id="L49">    }</span>
+
+    public void destroy() {
+        try {
+<span class="nc" id="L53">            fileMonitor.stop();</span>
+<span class="nc" id="L54">        } catch (Exception e) {</span>
+<span class="nc" id="L55">            logger.error(e.getMessage(), e);</span>
+<span class="nc" id="L56">        }</span>
+<span class="nc" id="L57">    }</span>
+
+<span class="nc" id="L59">    private class FileListener extends FileAlterationListenerAdaptor {</span>
+
+        @Override
+        public void onFileCreate(File file) {
+<span class="nc" id="L63">            super.onFileCreate(file);</span>
+            try {
+                // 加载新增的配置文件
+<span class="nc" id="L66">                String configContent = MappingConfigsLoader.loadConfig(adapterName + File.separator + file.getName());</span>
+<span class="nc" id="L67">                ESSyncConfig config = YamlUtils.ymlToObj(null,</span>
+                    configContent,
+                    ESSyncConfig.class,
+                    null,
+<span class="nc" id="L71">                    envProperties);</span>
+<span class="nc bnc" id="L72" title="All 2 branches missed.">                if (config != null) {</span>
+                    // 这里要记得设置esVersion bugfix
+<span class="nc" id="L74">                    config.setEsVersion(adapterName);</span>
+<span class="nc" id="L75">                    config.validate();</span>
+<span class="nc" id="L76">                    boolean result = esAdapter.addConfig(file.getName(), config);</span>
+<span class="nc bnc" id="L77" title="All 2 branches missed.">                    if (result) {</span>
+<span class="nc" id="L78">                        logger.info(&quot;Add a new es mapping config: {} to canal adapter&quot;,</span>
+<span class="nc" id="L79">                                file.getName());</span>
+                    }
+                }
+<span class="nc" id="L82">            } catch (Exception e) {</span>
+<span class="nc" id="L83">                logger.error(e.getMessage(), e);</span>
+<span class="nc" id="L84">            }</span>
+<span class="nc" id="L85">        }</span>
+
+        @Override
+        public void onFileChange(File file) {
+<span class="nc" id="L89">            super.onFileChange(file);</span>
+
+            try {
+<span class="nc bnc" id="L92" title="All 2 branches missed.">                if (esAdapter.getEsSyncConfig().containsKey(file.getName())) {</span>
+                    // 加载配置文件
+<span class="nc" id="L94">                    String configContent = MappingConfigsLoader.loadConfig(adapterName + File.separator</span>
+<span class="nc" id="L95">                                                                           + file.getName());</span>
+<span class="nc bnc" id="L96" title="All 2 branches missed.">                    if (configContent == null) {</span>
+<span class="nc" id="L97">                        onFileDelete(file);</span>
+<span class="nc" id="L98">                        return;</span>
+                    }
+<span class="nc" id="L100">                    ESSyncConfig config = YamlUtils.ymlToObj(null,</span>
+                        configContent,
+                        ESSyncConfig.class,
+                        null,
+<span class="nc" id="L104">                        envProperties);</span>
+<span class="nc bnc" id="L105" title="All 2 branches missed.">                    if (config == null) {</span>
+<span class="nc" id="L106">                        return;</span>
+                    }
+                    // 这里要记得设置esVersion bugfix
+<span class="nc" id="L109">                    config.setEsVersion(adapterName);</span>
+<span class="nc" id="L110">                    config.validate();</span>
+<span class="nc" id="L111">                    esAdapter.updateConfig(file.getName(), config);</span>
+<span class="nc" id="L112">                    logger.info(&quot;Change a es mapping config: {} of canal adapter&quot;, file.getName());</span>
+                }
+<span class="nc" id="L114">            } catch (Exception e) {</span>
+<span class="nc" id="L115">                logger.error(e.getMessage(), e);</span>
+<span class="nc" id="L116">            }</span>
+<span class="nc" id="L117">        }</span>
+
+        @Override
+        public void onFileDelete(File file) {
+<span class="nc" id="L121">            super.onFileDelete(file);</span>
+
+            try {
+<span class="nc bnc" id="L124" title="All 2 branches missed.">                if (esAdapter.getEsSyncConfig().containsKey(file.getName())) {</span>
+<span class="nc" id="L125">                    esAdapter.deleteConfig(file.getName());</span>
+<span class="nc" id="L126">                    logger.info(&quot;Delete a es mapping config: {} of canal adapter&quot;, file.getName());</span>
+                }
+<span class="nc" id="L128">            } catch (Exception e) {</span>
+<span class="nc" id="L129">                logger.error(e.getMessage(), e);</span>
+<span class="nc" id="L130">            }</span>
+<span class="nc" id="L131">        }</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.3.201901230119</span></div></body></html>

@@ -1,0 +1,12 @@
+com/alibaba/otter/canal/client/adapter/kudu/monitor/KuduConfigMonitor$FileListener.class
+com/alibaba/otter/canal/client/adapter/kudu/config/KuduMappingConfigLoader.class
+com/alibaba/otter/canal/client/adapter/kudu/KuduAdapter.class
+com/alibaba/otter/canal/client/adapter/kudu/support/SyncUtil.class
+com/alibaba/otter/canal/client/adapter/kudu/monitor/KuduConfigMonitor.class
+com/alibaba/otter/canal/client/adapter/kudu/config/KuduMappingConfig.class
+com/alibaba/otter/canal/client/adapter/kudu/support/KuduTemplate.class
+com/alibaba/otter/canal/client/adapter/kudu/service/KuduSyncService.class
+com/alibaba/otter/canal/client/adapter/kudu/service/KuduEtlService.class
+com/alibaba/otter/canal/client/adapter/kudu/config/KuduMappingConfig$KuduMapping.class
+com/alibaba/otter/canal/client/adapter/kudu/support/KuduTemplate$1.class
+com/alibaba/otter/canal/client/adapter/kudu/monitor/KuduConfigMonitor$1.class

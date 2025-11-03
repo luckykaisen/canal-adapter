@@ -1,0 +1,1 @@
+packageSearchIndex = [{"l":"com.alibaba.otter.canal.client.adapter.es6x"},{"l":"com.alibaba.otter.canal.client.adapter.es6x.etl"},{"l":"com.alibaba.otter.canal.client.adapter.es6x.support"},{"l":"org.elasticsearch.client"},{"l":"所有程序包","u":"allpackages-index.html"}];updateSearchResults();

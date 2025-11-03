@@ -1,0 +1,5 @@
+com.alibaba.otter.canal.client.adapter.rdb
+com.alibaba.otter.canal.client.adapter.rdb.config
+com.alibaba.otter.canal.client.adapter.rdb.monitor
+com.alibaba.otter.canal.client.adapter.rdb.service
+com.alibaba.otter.canal.client.adapter.rdb.support

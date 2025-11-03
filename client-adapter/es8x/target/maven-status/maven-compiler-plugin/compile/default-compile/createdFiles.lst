@@ -1,0 +1,10 @@
+com/alibaba/otter/canal/client/adapter/es8x/support/ESConnection.class
+com/alibaba/otter/canal/client/adapter/es8x/support/ES8xTemplate.class
+com/alibaba/otter/canal/client/adapter/es8x/support/ESConnection$ES8xDeleteRequest.class
+com/alibaba/otter/canal/client/adapter/es8x/support/ESConnection$ES8xUpdateRequest.class
+com/alibaba/otter/canal/client/adapter/es8x/ES8xAdapter.class
+com/alibaba/otter/canal/client/adapter/es8x/etl/ESEtlService.class
+com/alibaba/otter/canal/client/adapter/es8x/support/ESConnection$ES8xBulkRequest.class
+com/alibaba/otter/canal/client/adapter/es8x/support/ESConnection$ES8xIndexRequest.class
+com/alibaba/otter/canal/client/adapter/es8x/support/ESConnection$ESSearchRequest.class
+com/alibaba/otter/canal/client/adapter/es8x/support/ESConnection$ES8xBulkResponse.class

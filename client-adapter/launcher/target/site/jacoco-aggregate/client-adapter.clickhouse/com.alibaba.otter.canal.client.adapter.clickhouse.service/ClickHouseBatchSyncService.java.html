@@ -1,0 +1,556 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>ClickHouseBatchSyncService.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">canal client adapter launcher module for otter 1.1.8</a> &gt; <a href="../index.html" class="el_bundle">client-adapter.clickhouse</a> &gt; <a href="index.source.html" class="el_package">com.alibaba.otter.canal.client.adapter.clickhouse.service</a> &gt; <span class="el_source">ClickHouseBatchSyncService.java</span></div><h1>ClickHouseBatchSyncService.java</h1><pre class="source lang-java linenums">package com.alibaba.otter.canal.client.adapter.clickhouse.service;
+
+import java.sql.Connection;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
+import java.sql.Types;
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+import org.apache.commons.lang.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.alibaba.druid.pool.DruidDataSource;
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONWriter.Feature;
+import com.alibaba.otter.canal.client.adapter.clickhouse.config.MappingConfig;
+import com.alibaba.otter.canal.client.adapter.clickhouse.config.MappingConfig.DbMapping;
+import com.alibaba.otter.canal.client.adapter.clickhouse.support.BatchExecutor;
+import com.alibaba.otter.canal.client.adapter.clickhouse.support.SingleDml;
+import com.alibaba.otter.canal.client.adapter.clickhouse.support.SyncUtil;
+import com.alibaba.otter.canal.client.adapter.support.Dml;
+import com.alibaba.otter.canal.client.adapter.support.Util;
+
+/**
+ * ClickHouse batch synchronize
+ *
+ * @author: Xander
+ * @date: Created in 2023/11/10 22:23
+ * @email: zhrunxin33@gmail.com
+ * @version 1.1.8
+ */
+public class ClickHouseBatchSyncService {
+
+<span class="nc" id="L37">    private static final Logger                         logger  = LoggerFactory.getLogger(ClickHouseBatchSyncService.class);</span>
+
+    private DruidDataSource                             dataSource;
+
+    private Map&lt;String, Map&lt;String, Integer&gt;&gt;           columnsTypeCache;     // Cache of instance.schema.table -&gt; &lt;columnName, jdbcType&gt;
+
+    private Map&lt;MappingConfig, List&lt;SingleDml&gt;&gt;[]       bufferPools;          // Data buffer pool store sync data, List&lt;Dml&gt; dispersed as arrays according to hash value
+
+    private BatchExecutor[]                             batchExecutors;       // Batch Executor
+
+    private BatchExecutor                               alterExecutors;       // Alter Single Executor(update/delete/truncate)
+
+    private ExecutorService[]                           executorThreads;      // Be initialized once
+
+    private ScheduledExecutorService[]                  scheduledExecutors;
+
+<span class="nc" id="L53">    private int                                         threads = 3;          // Default parallel thread count</span>
+<span class="nc" id="L54">    private int                                         batchSize = 1000;</span>
+<span class="nc" id="L55">    private long                                        scheduleTime = 10;</span>
+    private boolean                                     skipDupException;
+
+    public Map&lt;String, Map&lt;String, Integer&gt;&gt; getColumnsTypeCache() {
+<span class="nc" id="L59">        return columnsTypeCache;</span>
+    }
+
+    public ClickHouseBatchSyncService(DruidDataSource dataSource, Integer threads, Integer batchSize, Long scheduleTime, boolean skipDupException){
+<span class="nc" id="L63">        this(dataSource, threads, batchSize, scheduleTime, new ConcurrentHashMap&lt;&gt;(), skipDupException);</span>
+<span class="nc" id="L64">    }</span>
+
+    @SuppressWarnings(&quot;unchecked&quot;)
+    public ClickHouseBatchSyncService(DruidDataSource dataSource, Integer threads, Integer batchSize, Long scheduleTime, Map&lt;String, Map&lt;String, Integer&gt;&gt; columnsTypeCache,
+<span class="nc" id="L68">                                      boolean skipDupException){</span>
+<span class="nc" id="L69">        this.dataSource = dataSource;</span>
+<span class="nc" id="L70">        this.columnsTypeCache = columnsTypeCache;</span>
+<span class="nc" id="L71">        this.skipDupException = skipDupException;</span>
+        try {
+<span class="nc bnc" id="L73" title="All 2 branches missed.">            if (threads != null) {</span>
+<span class="nc" id="L74">                this.threads = threads;</span>
+            }
+<span class="nc bnc" id="L76" title="All 2 branches missed.">            if (batchSize != null) {</span>
+<span class="nc" id="L77">                this.batchSize = batchSize;</span>
+            }
+<span class="nc bnc" id="L79" title="All 2 branches missed.">            if (scheduleTime != null) {</span>
+<span class="nc" id="L80">                this.scheduleTime = scheduleTime;</span>
+            }
+<span class="nc" id="L82">            this.alterExecutors = new BatchExecutor(dataSource);</span>
+<span class="nc" id="L83">            this.bufferPools = new ConcurrentHashMap[this.threads];</span>
+<span class="nc" id="L84">            this.batchExecutors = new BatchExecutor[this.threads];</span>
+<span class="nc" id="L85">            this.executorThreads = new ExecutorService[this.threads];</span>
+<span class="nc" id="L86">            this.scheduledExecutors = new ScheduledExecutorService[this.threads];</span>
+<span class="nc bnc" id="L87" title="All 2 branches missed.">            for (int i = 0; i &lt; this.threads; i++) {</span>
+<span class="nc" id="L88">                bufferPools[i] = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="nc" id="L89">                batchExecutors[i] = new BatchExecutor(dataSource);</span>
+<span class="nc" id="L90">                executorThreads[i] = Executors.newSingleThreadExecutor();</span>
+<span class="nc" id="L91">                scheduledExecutors[i] = Executors.newSingleThreadScheduledExecutor();</span>
+            }
+<span class="nc" id="L93">            scheduleBatchSync();</span>
+<span class="nc" id="L94">        } catch (Exception e) {</span>
+<span class="nc" id="L95">            throw new RuntimeException(e);</span>
+<span class="nc" id="L96">        }</span>
+<span class="nc" id="L97">    }</span>
+
+    /**
+     * Timing-driven event
+     * start schedule batch sync threadPool
+     */
+    private void scheduleBatchSync() {
+<span class="nc bnc" id="L104" title="All 2 branches missed.">        for (int i = 0; i &lt; scheduledExecutors.length; i++) {</span>
+<span class="nc" id="L105">            int index = i;</span>
+<span class="nc" id="L106">            scheduledExecutors[i].scheduleAtFixedRate(()-&gt;{</span>
+<span class="nc" id="L107">                List&lt;Future&lt;Boolean&gt;&gt; futures = new ArrayList&lt;&gt;();</span>
+<span class="nc bnc" id="L108" title="All 2 branches missed.">                for (MappingConfig mappingConfig : bufferPools[index].keySet()) {</span>
+<span class="nc" id="L109">                    List&lt;SingleDml&gt; dmls = bufferPools[index].get(mappingConfig);</span>
+<span class="nc bnc" id="L110" title="All 4 branches missed.">                    if (dmls == null || dmls.isEmpty()) {</span>
+<span class="nc" id="L111">                        return;</span>
+                    }
+                    List&lt;SingleDml&gt; tempDmls;
+<span class="nc" id="L114">                    synchronized (dmls) {</span>
+<span class="nc" id="L115">                        tempDmls = new ArrayList&lt;&gt;(dmls);</span>
+<span class="nc" id="L116">                        dmls.clear();</span>
+<span class="nc" id="L117">                    }</span>
+<span class="nc" id="L118">                    futures.add(executorThreads[index].submit(()-&gt;{</span>
+                        try {
+<span class="nc" id="L120">                            insert(batchExecutors[index], mappingConfig, tempDmls);</span>
+<span class="nc" id="L121">                            batchExecutors[index].commit();</span>
+<span class="nc" id="L122">                            return true;</span>
+<span class="nc" id="L123">                        } catch (Exception e){</span>
+<span class="nc" id="L124">                            batchExecutors[index].rollback();</span>
+<span class="nc" id="L125">                            throw new RuntimeException(e);</span>
+                        }
+                    }));
+<span class="nc" id="L128">                }</span>
+<span class="nc" id="L129">            }, 0, scheduleTime, TimeUnit.SECONDS);</span>
+        }
+<span class="nc" id="L131">        logger.info(&quot;Schedule batch executors has started successfully!&quot;);</span>
+<span class="nc" id="L132">    }</span>
+
+    /**
+     * 批量同步回调
+     *
+     * @param dmls 批量 DML
+     * @param function 回调方法
+     */
+    public void sync(List&lt;Dml&gt; dmls, Function&lt;Dml, Boolean&gt; function) {
+<span class="nc" id="L141">        boolean toExecute = false;</span>
+<span class="nc bnc" id="L142" title="All 2 branches missed.">        for (Dml dml : dmls) {</span>
+<span class="nc bnc" id="L143" title="All 2 branches missed.">            if (!toExecute) {</span>
+<span class="nc" id="L144">                toExecute = function.apply(dml);</span>
+            } else {
+<span class="nc" id="L146">                function.apply(dml);</span>
+            }
+<span class="nc" id="L148">        }</span>
+<span class="nc" id="L149">    }</span>
+
+    /**
+     * Distribute dmls into different partition
+     *
+     * @param mappingConfig {@link com.alibaba.otter.canal.client.adapter.clickhouse.ClickHouseAdapter#mappingConfigCache }
+     * @param dmls received DML
+     */
+    public void sync(Map&lt;String, Map&lt;String, MappingConfig&gt;&gt; mappingConfig, List&lt;Dml&gt; dmls, Properties envProperties) {
+<span class="nc" id="L158">        sync(dmls, dml -&gt; {</span>
+<span class="nc bnc" id="L159" title="All 6 branches missed.">            if (dml.getIsDdl() != null &amp;&amp; dml.getIsDdl() &amp;&amp; StringUtils.isNotEmpty(dml.getSql())) {</span>
+                // DDL(Cache need to update when DDL was executed)
+<span class="nc" id="L161">            columnsTypeCache.remove(dml.getDestination() + &quot;.&quot; + dml.getDatabase() + &quot;.&quot; + dml.getTable());</span>
+<span class="nc" id="L162">            return false;</span>
+        } else {
+            // DML
+<span class="nc" id="L165">            String destination = StringUtils.trimToEmpty(dml.getDestination());</span>
+<span class="nc" id="L166">            String groupId = StringUtils.trimToEmpty(dml.getGroupId());</span>
+<span class="nc" id="L167">            String database = dml.getDatabase();</span>
+<span class="nc" id="L168">            String table = dml.getTable();</span>
+            Map&lt;String, MappingConfig&gt; configMap;
+<span class="nc bnc" id="L170" title="All 4 branches missed.">            if (envProperties != null &amp;&amp; !&quot;tcp&quot;.equalsIgnoreCase(envProperties.getProperty(&quot;canal.conf.mode&quot;))) {</span>
+<span class="nc" id="L171">                configMap = mappingConfig.get(destination + &quot;-&quot; + groupId + &quot;_&quot; + database + &quot;-&quot; + table);</span>
+            } else {
+<span class="nc" id="L173">                configMap = mappingConfig.get(destination + &quot;_&quot; + database + &quot;-&quot; + table);</span>
+            }
+
+<span class="nc bnc" id="L176" title="All 2 branches missed.">            if (configMap == null) {</span>
+<span class="nc" id="L177">                return false;</span>
+            }
+
+<span class="nc bnc" id="L180" title="All 2 branches missed.">            if (configMap.values().isEmpty()) {</span>
+<span class="nc" id="L181">                return false;</span>
+            }
+
+<span class="nc bnc" id="L184" title="All 2 branches missed.">            for (MappingConfig config : configMap.values()) {</span>
+<span class="nc" id="L185">                distributeDml(config, dml);</span>
+<span class="nc" id="L186">            }</span>
+<span class="nc" id="L187">            return true;</span>
+        }
+    }   );
+<span class="nc" id="L190">    }</span>
+
+    /**
+     * Dml distributor
+     */
+    private void distributeDml(MappingConfig config, Dml dml) {
+<span class="nc bnc" id="L196" title="All 2 branches missed.">        if (config != null) {</span>
+            try {
+<span class="nc" id="L198">                String type = dml.getType();</span>
+<span class="nc bnc" id="L199" title="All 2 branches missed.">                if (type == null) return;</span>
+
+<span class="nc bnc" id="L201" title="All 2 branches missed.">                if (type.equalsIgnoreCase(&quot;INSERT&quot;)) {</span>
+<span class="nc" id="L202">                    appendDmlBufferPartition(config, dml);</span>
+                } else {
+<span class="nc" id="L204">                    boolean caseInsensitive = config.getDbMapping().isCaseInsensitive();</span>
+<span class="nc" id="L205">                    List&lt;SingleDml&gt; singleDmls = SingleDml.dml2SingleDmls(dml, caseInsensitive);</span>
+
+<span class="nc bnc" id="L207" title="All 2 branches missed.">                    if (type.equalsIgnoreCase(&quot;UPDATE&quot;)) {</span>
+<span class="nc bnc" id="L208" title="All 2 branches missed.">                        for (SingleDml singleDml : singleDmls) {</span>
+<span class="nc" id="L209">                            update(alterExecutors, config, singleDml);</span>
+<span class="nc" id="L210">                        }</span>
+<span class="nc bnc" id="L211" title="All 2 branches missed.">                    } else if (type.equalsIgnoreCase(&quot;DELETE&quot;)) {</span>
+<span class="nc bnc" id="L212" title="All 2 branches missed.">                        for (SingleDml singleDml : singleDmls) {</span>
+<span class="nc" id="L213">                            delete(alterExecutors, config, singleDml);</span>
+<span class="nc" id="L214">                        }</span>
+<span class="nc bnc" id="L215" title="All 2 branches missed.">                    } else if (type.equalsIgnoreCase(&quot;TRUNCATE&quot;)) {</span>
+<span class="nc" id="L216">                        truncate(alterExecutors, config);</span>
+                    }
+                }
+<span class="nc bnc" id="L219" title="All 2 branches missed.">                if (logger.isDebugEnabled()) {</span>
+<span class="nc" id="L220">                    logger.debug(&quot;DML: {}&quot;, JSON.toJSONString(dml, Feature.WriteNulls));</span>
+                }
+<span class="nc" id="L222">            } catch (SQLException e) {</span>
+<span class="nc" id="L223">                throw new RuntimeException(e);</span>
+<span class="nc" id="L224">            }</span>
+        }
+<span class="nc" id="L226">    }</span>
+
+    public void appendDmlBufferPartition(MappingConfig config, Dml dml) {
+<span class="nc" id="L229">        boolean caseInsensitive = config.getDbMapping().isCaseInsensitive();</span>
+<span class="nc" id="L230">        List&lt;SingleDml&gt; singleDmls = SingleDml.dml2SingleDmls(dml, caseInsensitive);</span>
+
+<span class="nc" id="L232">        singleDmls.forEach(singleDml -&gt; {</span>
+<span class="nc" id="L233">            int hash = mappingHash(config.getDbMapping());</span>
+<span class="nc bnc" id="L234" title="All 2 branches missed.">            if (!config.getConcurrent()) {</span>
+<span class="nc" id="L235">                hash = 0;</span>
+            }
+<span class="nc" id="L237">            List&lt;SingleDml&gt; dmls = bufferPools[hash].computeIfAbsent(config, k -&gt; new ArrayList&lt;&gt;());</span>
+<span class="nc" id="L238">            synchronized (dmls) {</span>
+<span class="nc" id="L239">                dmls.add(singleDml);</span>
+<span class="nc" id="L240">                logger.info(&quot;Append one data into pool, id {}&quot;, singleDml.getData().get(&quot;id&quot;));</span>
+<span class="nc" id="L241">            }</span>
+            // Check the size of the List, achieve when it reaches the maximum value
+<span class="nc bnc" id="L243" title="All 2 branches missed.">            if (dmls.size() &gt;= batchSize) syncToClickHouse(config, hash);</span>
+<span class="nc" id="L244">        });</span>
+<span class="nc" id="L245">    }</span>
+
+    /**
+     * sync when size of list{@link #bufferPools } reaches the maximum value
+     *
+     * @param config key
+     * @param index parallel thread index
+     */
+    private void syncToClickHouse(MappingConfig config, int index) {
+<span class="nc" id="L254">        List&lt;SingleDml&gt; dmls = bufferPools[index].get(config);</span>
+<span class="nc" id="L255">        logger.info(&quot;schema:{} table:{} reaches the maximum value, ready to synchronize, size {}&quot;, config.getDbMapping().getDatabase(), config.getDbMapping().getTable(), dmls.size());</span>
+<span class="nc bnc" id="L256" title="All 4 branches missed.">        if (dmls ==null || dmls.isEmpty()) {</span>
+<span class="nc" id="L257">            return;</span>
+        }
+        List&lt;SingleDml&gt; tempDmls;
+<span class="nc" id="L260">        synchronized (dmls) {</span>
+<span class="nc" id="L261">            tempDmls = new ArrayList&lt;&gt;(dmls);</span>
+<span class="nc" id="L262">            dmls.clear();</span>
+<span class="nc" id="L263">        }</span>
+<span class="nc" id="L264">        executorThreads[index].submit(() -&gt; {</span>
+            try {
+<span class="nc" id="L266">                insert(batchExecutors[index], config, tempDmls);</span>
+<span class="nc" id="L267">                batchExecutors[index].commit();</span>
+<span class="nc" id="L268">                return true;</span>
+<span class="nc" id="L269">            } catch (Exception e) {</span>
+<span class="nc" id="L270">                batchExecutors[index].rollback();</span>
+<span class="nc" id="L271">                throw new RuntimeException(e);</span>
+            }
+        });
+<span class="nc" id="L274">    }</span>
+
+    /**
+     * Insert
+     *
+     * @param batchExecutor batch translational executor
+     * @param config corresponding configuration object
+     * @param dmls DMLs
+     */
+    private void insert(BatchExecutor batchExecutor, MappingConfig config, List&lt;SingleDml&gt; dmls) throws SQLException {
+<span class="nc bnc" id="L284" title="All 4 branches missed.">        if (dmls == null || dmls.isEmpty()) {</span>
+<span class="nc" id="L285">            return;</span>
+        }
+<span class="nc bnc" id="L287" title="All 4 branches missed.">        List&lt;SingleDml&gt; clearDmls = dmls.stream().filter(e -&gt; e.getData() != null &amp;&amp; !e.getData().isEmpty()).collect(Collectors.toList());</span>
+<span class="nc bnc" id="L288" title="All 4 branches missed.">        if (clearDmls == null || clearDmls.isEmpty()) {</span>
+<span class="nc" id="L289">            return;</span>
+        }
+
+<span class="nc" id="L292">        DbMapping dbMapping = config.getDbMapping();</span>
+<span class="nc" id="L293">        String backtick = SyncUtil.getBacktickByDbType(dataSource.getDbType());</span>
+<span class="nc" id="L294">        Map&lt;String, String&gt; columnsMap = SyncUtil.getColumnsMap(dbMapping, clearDmls.get(0).getData());</span>
+
+<span class="nc" id="L296">        StringBuilder insertSql = new StringBuilder();</span>
+<span class="nc" id="L297">        insertSql.append(&quot;INSERT INTO &quot;).append(SyncUtil.getDbTableName(dbMapping, dataSource.getDbType())).append(&quot; (&quot;);</span>
+
+<span class="nc" id="L299">        columnsMap.forEach((targetColumnName, srcColumnName) -&gt; insertSql.append(backtick)</span>
+<span class="nc" id="L300">            .append(targetColumnName)</span>
+<span class="nc" id="L301">            .append(backtick)</span>
+<span class="nc" id="L302">            .append(&quot;,&quot;));</span>
+<span class="nc" id="L303">        int len = insertSql.length();</span>
+<span class="nc" id="L304">        insertSql.delete(len - 1, len).append(&quot;) VALUES (&quot;);</span>
+<span class="nc" id="L305">        int mapLen = columnsMap.size();</span>
+<span class="nc bnc" id="L306" title="All 2 branches missed.">        for (int i = 0; i &lt; mapLen; i++) {</span>
+<span class="nc" id="L307">            insertSql.append(&quot;?,&quot;);</span>
+        }
+<span class="nc" id="L309">        len = insertSql.length();</span>
+<span class="nc" id="L310">        insertSql.delete(len - 1, len).append(&quot;)&quot;);</span>
+
+<span class="nc" id="L312">        Map&lt;String, Integer&gt; ctype = getTargetColumnType(batchExecutor.getConn(), config);</span>
+
+<span class="nc" id="L314">        List&lt;List&lt;Map&lt;String, ?&gt;&gt;&gt; values = new ArrayList&lt;&gt;();</span>
+<span class="nc" id="L315">        boolean flag = false;</span>
+<span class="nc bnc" id="L316" title="All 2 branches missed.">        for (Map.Entry&lt;String, String&gt; entry : columnsMap.entrySet()) {</span>
+<span class="nc" id="L317">            String targetColumnName = entry.getKey();</span>
+<span class="nc" id="L318">            String srcColumnName = entry.getValue();</span>
+<span class="nc bnc" id="L319" title="All 2 branches missed.">            if (srcColumnName == null) {</span>
+<span class="nc" id="L320">                srcColumnName = Util.cleanColumn(targetColumnName);</span>
+            }
+
+<span class="nc" id="L323">            Integer type = ctype.get(Util.cleanColumn(targetColumnName).toLowerCase());</span>
+<span class="nc bnc" id="L324" title="All 2 branches missed.">            if (type == null) {</span>
+<span class="nc" id="L325">                throw new RuntimeException(&quot;Target column: &quot; + targetColumnName + &quot; not matched&quot;);</span>
+            }
+<span class="nc bnc" id="L327" title="All 2 branches missed.">            for (int i = 0; i &lt; clearDmls.size(); i++) {</span>
+<span class="nc" id="L328">                Map&lt;String, Object&gt; dmlData = clearDmls.get(i).getData();</span>
+                List&lt;Map&lt;String, ?&gt;&gt; item;
+<span class="nc bnc" id="L330" title="All 2 branches missed.">                if (flag == false) {</span>
+<span class="nc" id="L331">                    item = new ArrayList&lt;&gt;();</span>
+<span class="nc" id="L332">                    values.add(item);</span>
+                } else {
+<span class="nc" id="L334">                    item = values.get(i);</span>
+                }
+<span class="nc" id="L336">                Object value = dmlData.get(srcColumnName);</span>
+<span class="nc" id="L337">                BatchExecutor.setValue(item, type, value);</span>
+            }
+<span class="nc" id="L339">            flag = true;</span>
+<span class="nc" id="L340">        }</span>
+
+        try {
+<span class="nc" id="L343">            batchExecutor.batchExecute(insertSql.toString(), values);</span>
+<span class="nc" id="L344">        } catch (SQLException e) {</span>
+<span class="nc bnc" id="L345" title="All 2 branches missed.">            if (skipDupException</span>
+<span class="nc bnc" id="L346" title="All 4 branches missed.">                &amp;&amp; (e.getMessage().contains(&quot;Duplicate entry&quot;) || e.getMessage().startsWith(&quot;ORA-00001:&quot;))) {</span>
+                // ignore
+                // TODO 增加更多关系数据库的主键冲突的错误码
+            } else {
+<span class="nc" id="L350">                throw e;</span>
+            }
+<span class="nc" id="L352">        }</span>
+<span class="nc bnc" id="L353" title="All 2 branches missed.">        if (logger.isTraceEnabled()) {</span>
+<span class="nc" id="L354">            logger.trace(&quot;Insert into target table, sql: {}&quot;, insertSql);</span>
+        }
+
+<span class="nc" id="L357">    }</span>
+
+    /**
+     * 更新操作
+     *
+     * @param config 配置项
+     * @param dml DML数据
+     */
+    private void update(BatchExecutor batchExecutor, MappingConfig config, SingleDml dml) throws SQLException {
+<span class="nc" id="L366">        Map&lt;String, Object&gt; data = dml.getData();</span>
+<span class="nc bnc" id="L367" title="All 4 branches missed.">        if (data == null || data.isEmpty()) {</span>
+<span class="nc" id="L368">            return;</span>
+        }
+
+<span class="nc" id="L371">        Map&lt;String, Object&gt; old = dml.getOld();</span>
+<span class="nc bnc" id="L372" title="All 4 branches missed.">        if (old == null || old.isEmpty()) {</span>
+<span class="nc" id="L373">            return;</span>
+        }
+
+<span class="nc" id="L376">        DbMapping dbMapping = config.getDbMapping();</span>
+<span class="nc" id="L377">        String backtick = SyncUtil.getBacktickByDbType(dataSource.getDbType());</span>
+<span class="nc" id="L378">        Map&lt;String, String&gt; columnsMap = SyncUtil.getColumnsMap(dbMapping, data);</span>
+
+<span class="nc" id="L380">        Map&lt;String, Integer&gt; ctype = getTargetColumnType(batchExecutor.getConn(), config);</span>
+
+<span class="nc" id="L382">        StringBuilder updateSql = new StringBuilder();</span>
+<span class="nc" id="L383">        updateSql.append(&quot;ALTER TABLE &quot;).append(SyncUtil.getDbTableName(dbMapping, dataSource.getDbType())).append(&quot; UPDATE &quot;);</span>
+<span class="nc" id="L384">        List&lt;Map&lt;String, ?&gt;&gt; values = new ArrayList&lt;&gt;();</span>
+<span class="nc" id="L385">        boolean hasMatched = false;</span>
+<span class="nc bnc" id="L386" title="All 2 branches missed.">        for (String srcColumnName : old.keySet()) {</span>
+<span class="nc" id="L387">            List&lt;String&gt; targetColumnNames = new ArrayList&lt;&gt;();</span>
+<span class="nc" id="L388">            columnsMap.forEach((targetColumn, srcColumn) -&gt; {</span>
+<span class="nc bnc" id="L389" title="All 2 branches missed.">                if (srcColumnName.equalsIgnoreCase(srcColumn)) {</span>
+<span class="nc" id="L390">                    targetColumnNames.add(targetColumn);</span>
+                }
+<span class="nc" id="L392">            });</span>
+<span class="nc bnc" id="L393" title="All 2 branches missed.">            if (!targetColumnNames.isEmpty()) {</span>
+<span class="nc" id="L394">                hasMatched = true;</span>
+<span class="nc bnc" id="L395" title="All 2 branches missed.">                for (String targetColumnName : targetColumnNames) {</span>
+<span class="nc" id="L396">                    updateSql.append(backtick).append(targetColumnName).append(backtick).append(&quot;=?, &quot;);</span>
+<span class="nc" id="L397">                    Integer type = ctype.get(Util.cleanColumn(targetColumnName).toLowerCase());</span>
+<span class="nc bnc" id="L398" title="All 2 branches missed.">                    if (type == null) {</span>
+<span class="nc" id="L399">                        throw new RuntimeException(&quot;Target column: &quot; + targetColumnName + &quot; not matched&quot;);</span>
+                    }
+<span class="nc" id="L401">                    BatchExecutor.setValue(values, type, data.get(srcColumnName));</span>
+<span class="nc" id="L402">                }</span>
+            }
+<span class="nc" id="L404">        }</span>
+<span class="nc bnc" id="L405" title="All 2 branches missed.">        if (!hasMatched) {</span>
+<span class="nc" id="L406">            logger.warn(&quot;Did not matched any columns to update &quot;);</span>
+<span class="nc" id="L407">            return;</span>
+        }
+<span class="nc" id="L409">        int len = updateSql.length();</span>
+<span class="nc" id="L410">        updateSql.delete(len - 2, len).append(&quot; WHERE &quot;);</span>
+
+        // 拼接主键
+<span class="nc" id="L413">        appendCondition(dbMapping, updateSql, ctype, values, data, old);</span>
+<span class="nc" id="L414">        batchExecutor.execute(updateSql.toString(), values);</span>
+<span class="nc bnc" id="L415" title="All 2 branches missed.">        if (logger.isTraceEnabled()) {</span>
+<span class="nc" id="L416">            logger.trace(&quot;Alter update target table, sql: {}&quot;, updateSql);</span>
+        }
+<span class="nc" id="L418">    }</span>
+
+    /**
+     * 删除操作
+     *
+     * @param config
+     * @param dml
+     */
+    private void delete(BatchExecutor batchExecutor, MappingConfig config, SingleDml dml) throws SQLException {
+<span class="nc" id="L427">        Map&lt;String, Object&gt; data = dml.getData();</span>
+<span class="nc bnc" id="L428" title="All 4 branches missed.">        if (data == null || data.isEmpty()) {</span>
+<span class="nc" id="L429">            return;</span>
+        }
+
+<span class="nc" id="L432">        DbMapping dbMapping = config.getDbMapping();</span>
+<span class="nc" id="L433">        Map&lt;String, Integer&gt; ctype = getTargetColumnType(batchExecutor.getConn(), config);</span>
+
+<span class="nc" id="L435">        StringBuilder sql = new StringBuilder();</span>
+<span class="nc" id="L436">        sql.append(&quot;ALTER TABLE &quot;).append(SyncUtil.getDbTableName(dbMapping, dataSource.getDbType())).append(&quot; DELETE WHERE &quot;);</span>
+
+<span class="nc" id="L438">        List&lt;Map&lt;String, ?&gt;&gt; values = new ArrayList&lt;&gt;();</span>
+        // 拼接主键
+<span class="nc" id="L440">        appendCondition(dbMapping, sql, ctype, values, data);</span>
+<span class="nc" id="L441">        batchExecutor.execute(sql.toString(), values);</span>
+<span class="nc bnc" id="L442" title="All 2 branches missed.">        if (logger.isTraceEnabled()) {</span>
+<span class="nc" id="L443">            logger.trace(&quot;Alter delete from target table, sql: {}&quot;, sql);</span>
+        }
+<span class="nc" id="L445">    }</span>
+
+    /**
+     * truncate操作
+     *
+     * @param config
+     */
+    private void truncate(BatchExecutor batchExecutor, MappingConfig config) throws SQLException {
+<span class="nc" id="L453">        DbMapping dbMapping = config.getDbMapping();</span>
+<span class="nc" id="L454">        StringBuilder sql = new StringBuilder();</span>
+<span class="nc" id="L455">        sql.append(&quot;TRUNCATE TABLE &quot;).append(SyncUtil.getDbTableName(dbMapping, dataSource.getDbType()));</span>
+<span class="nc" id="L456">        batchExecutor.execute(sql.toString(), new ArrayList&lt;&gt;());</span>
+<span class="nc bnc" id="L457" title="All 2 branches missed.">        if (logger.isTraceEnabled()) {</span>
+<span class="nc" id="L458">            logger.trace(&quot;Truncate target table, sql: {}&quot;, sql);</span>
+        }
+<span class="nc" id="L460">    }</span>
+
+    /**
+     * 获取目标字段类型
+     *
+     * @param conn sql connection
+     * @param config 映射配置
+     * @return 字段sqlType
+     */
+    private Map&lt;String, Integer&gt; getTargetColumnType(Connection conn, MappingConfig config) {
+<span class="nc" id="L470">        DbMapping dbMapping = config.getDbMapping();</span>
+<span class="nc" id="L471">        String cacheKey = config.getDestination() + &quot;.&quot; + dbMapping.getDatabase() + &quot;.&quot; + dbMapping.getTable();</span>
+<span class="nc" id="L472">        Map&lt;String, Integer&gt; columnType = columnsTypeCache.get(cacheKey);</span>
+<span class="nc bnc" id="L473" title="All 2 branches missed.">        if (columnType == null) {</span>
+<span class="nc" id="L474">            synchronized (ClickHouseBatchSyncService.class) {</span>
+<span class="nc" id="L475">                columnType = columnsTypeCache.get(cacheKey);</span>
+<span class="nc bnc" id="L476" title="All 2 branches missed.">                if (columnType == null) {</span>
+<span class="nc" id="L477">                    columnType = new LinkedHashMap&lt;&gt;();</span>
+<span class="nc" id="L478">                    final Map&lt;String, Integer&gt; columnTypeTmp = columnType;</span>
+<span class="nc" id="L479">                    String sql = &quot;SELECT * FROM &quot; + SyncUtil.getDbTableName(dbMapping, dataSource.getDbType()) + &quot; WHERE 1=2&quot;;</span>
+<span class="nc" id="L480">                    Util.sqlRS(conn, sql, rs -&gt; {</span>
+                        try {
+<span class="nc" id="L482">                            ResultSetMetaData rsd = rs.getMetaData();</span>
+<span class="nc" id="L483">                            int columnCount = rsd.getColumnCount();</span>
+<span class="nc bnc" id="L484" title="All 2 branches missed.">                            for (int i = 1; i &lt;= columnCount; i++) {</span>
+<span class="nc" id="L485">                                int colType = rsd.getColumnType(i);</span>
+                                // 修复year类型作为date处理时的data truncated问题
+<span class="nc bnc" id="L487" title="All 2 branches missed.">                                if (&quot;YEAR&quot;.equals(rsd.getColumnTypeName(i))) {</span>
+<span class="nc" id="L488">                                    colType = Types.VARCHAR;</span>
+                                }
+<span class="nc" id="L490">                                columnTypeTmp.put(rsd.getColumnName(i).toLowerCase(), colType);</span>
+                            }
+<span class="nc" id="L492">                            columnsTypeCache.put(cacheKey, columnTypeTmp);</span>
+<span class="nc" id="L493">                        } catch (SQLException e) {</span>
+<span class="nc" id="L494">                            logger.error(e.getMessage(), e);</span>
+<span class="nc" id="L495">                        }</span>
+<span class="nc" id="L496">                    });</span>
+                }
+<span class="nc" id="L498">            }</span>
+        }
+<span class="nc" id="L500">        return columnType;</span>
+    }
+
+    /**
+     * 拼接主键 where条件
+     */
+    private void appendCondition(MappingConfig.DbMapping dbMapping, StringBuilder sql, Map&lt;String, Integer&gt; ctype,
+                                 List&lt;Map&lt;String, ?&gt;&gt; values, Map&lt;String, Object&gt; d) {
+<span class="nc" id="L508">        appendCondition(dbMapping, sql, ctype, values, d, null);</span>
+<span class="nc" id="L509">    }</span>
+
+    private void appendCondition(MappingConfig.DbMapping dbMapping, StringBuilder sql, Map&lt;String, Integer&gt; ctype,
+                                 List&lt;Map&lt;String, ?&gt;&gt; values, Map&lt;String, Object&gt; d, Map&lt;String, Object&gt; o) {
+<span class="nc" id="L513">        String backtick = SyncUtil.getBacktickByDbType(dataSource.getDbType());</span>
+
+        // 拼接主键
+<span class="nc bnc" id="L516" title="All 2 branches missed.">        for (Map.Entry&lt;String, String&gt; entry : dbMapping.getTargetPk().entrySet()) {</span>
+<span class="nc" id="L517">            String targetColumnName = entry.getKey();</span>
+<span class="nc" id="L518">            String srcColumnName = entry.getValue();</span>
+<span class="nc bnc" id="L519" title="All 2 branches missed.">            if (srcColumnName == null) {</span>
+<span class="nc" id="L520">                srcColumnName = Util.cleanColumn(targetColumnName);</span>
+            }
+<span class="nc" id="L522">            sql.append(backtick).append(targetColumnName).append(backtick).append(&quot;=? AND &quot;);</span>
+<span class="nc" id="L523">            Integer type = ctype.get(Util.cleanColumn(targetColumnName).toLowerCase());</span>
+<span class="nc bnc" id="L524" title="All 2 branches missed.">            if (type == null) {</span>
+<span class="nc" id="L525">                throw new RuntimeException(&quot;Target column: &quot; + targetColumnName + &quot; not matched&quot;);</span>
+            }
+            // 如果有修改主键的情况
+<span class="nc bnc" id="L528" title="All 4 branches missed.">            if (o != null &amp;&amp; o.containsKey(srcColumnName)) {</span>
+<span class="nc" id="L529">                BatchExecutor.setValue(values, type, o.get(srcColumnName));</span>
+            } else {
+<span class="nc" id="L531">                BatchExecutor.setValue(values, type, d.get(srcColumnName));</span>
+            }
+<span class="nc" id="L533">        }</span>
+<span class="nc" id="L534">        int len = sql.length();</span>
+<span class="nc" id="L535">        sql.delete(len - 4, len);</span>
+<span class="nc" id="L536">    }</span>
+
+    /**
+     * make sure the same table in one index
+     *
+     * @param dbMapping
+     * @return
+     */
+    private int mappingHash(MappingConfig.DbMapping dbMapping) {
+<span class="nc" id="L545">        int hash = dbMapping.getDatabase().toLowerCase().hashCode() + dbMapping.getTable().toLowerCase().hashCode();</span>
+<span class="nc" id="L546">        hash = Math.abs(hash) % threads;</span>
+<span class="nc" id="L547">        return Math.abs(hash);</span>
+    }
+
+    public void close() {
+<span class="nc bnc" id="L551" title="All 2 branches missed.">        for (int i = 0; i &lt; threads; i++) {</span>
+<span class="nc" id="L552">            executorThreads[i].shutdown();</span>
+        }
+<span class="nc" id="L554">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.3.201901230119</span></div></body></html>

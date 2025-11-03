@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>RdbConfigMonitor.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">canal client adapter launcher module for otter 1.1.8</a> &gt; <a href="../index.html" class="el_bundle">client-adapter.rdb</a> &gt; <a href="index.source.html" class="el_package">com.alibaba.otter.canal.client.adapter.rdb.monitor</a> &gt; <span class="el_source">RdbConfigMonitor.java</span></div><h1>RdbConfigMonitor.java</h1><pre class="source lang-java linenums">package com.alibaba.otter.canal.client.adapter.rdb.monitor;
+
+import com.alibaba.otter.canal.client.adapter.rdb.RdbAdapter;
+import com.alibaba.otter.canal.client.adapter.rdb.config.MappingConfig;
+import com.alibaba.otter.canal.client.adapter.support.MappingConfigsLoader;
+import com.alibaba.otter.canal.client.adapter.support.Util;
+import com.alibaba.otter.canal.client.adapter.support.YamlUtils;
+import java.io.File;
+import java.util.Properties;
+import org.apache.commons.io.filefilter.FileFilterUtils;
+import org.apache.commons.io.monitor.FileAlterationListenerAdaptor;
+import org.apache.commons.io.monitor.FileAlterationMonitor;
+import org.apache.commons.io.monitor.FileAlterationObserver;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+<span class="nc" id="L17">public class RdbConfigMonitor {</span>
+
+<span class="nc" id="L19">    private static final Logger   logger      = LoggerFactory.getLogger(RdbConfigMonitor.class);</span>
+
+    private static final String   adapterName = &quot;rdb&quot;;
+
+    private String                key;
+
+    private RdbAdapter            rdbAdapter;
+
+    private Properties            envProperties;
+
+    private FileAlterationMonitor fileMonitor;
+
+    public void init(String key, RdbAdapter rdbAdapter, Properties envProperties) {
+<span class="nc" id="L32">        this.key = key;</span>
+<span class="nc" id="L33">        this.rdbAdapter = rdbAdapter;</span>
+<span class="nc" id="L34">        this.envProperties = envProperties;</span>
+<span class="nc" id="L35">        File confDir = Util.getConfDirPath(adapterName);</span>
+        try {
+<span class="nc" id="L37">            FileAlterationObserver observer = new FileAlterationObserver(confDir,</span>
+<span class="nc" id="L38">                FileFilterUtils.and(FileFilterUtils.fileFileFilter(), FileFilterUtils.suffixFileFilter(&quot;yml&quot;)));</span>
+<span class="nc" id="L39">            FileListener listener = new FileListener();</span>
+<span class="nc" id="L40">            observer.addListener(listener);</span>
+<span class="nc" id="L41">            fileMonitor = new FileAlterationMonitor(3000, observer);</span>
+<span class="nc" id="L42">            fileMonitor.start();</span>
+
+<span class="nc" id="L44">        } catch (Exception e) {</span>
+<span class="nc" id="L45">            logger.error(e.getMessage(), e);</span>
+<span class="nc" id="L46">        }</span>
+<span class="nc" id="L47">    }</span>
+
+    public void destroy() {
+        try {
+<span class="nc" id="L51">            fileMonitor.stop();</span>
+<span class="nc" id="L52">        } catch (Exception e) {</span>
+<span class="nc" id="L53">            logger.error(e.getMessage(), e);</span>
+<span class="nc" id="L54">        }</span>
+<span class="nc" id="L55">    }</span>
+
+<span class="nc" id="L57">    private class FileListener extends FileAlterationListenerAdaptor {</span>
+
+        @Override
+        public void onFileCreate(File file) {
+<span class="nc" id="L61">            super.onFileCreate(file);</span>
+            try {
+                // 加载新增的配置文件
+<span class="nc" id="L64">                String configContent = MappingConfigsLoader.loadConfig(adapterName + File.separator + file.getName());</span>
+<span class="nc" id="L65">                MappingConfig config = YamlUtils</span>
+<span class="nc" id="L66">                    .ymlToObj(null, configContent, MappingConfig.class, null, envProperties);</span>
+<span class="nc bnc" id="L67" title="All 2 branches missed.">                if (config == null) {</span>
+<span class="nc" id="L68">                    return;</span>
+                }
+<span class="nc" id="L70">                config.validate();</span>
+<span class="nc" id="L71">                boolean result = rdbAdapter.addConfig(file.getName(), config);</span>
+<span class="nc bnc" id="L72" title="All 2 branches missed.">                if (result) {</span>
+<span class="nc" id="L73">                    logger.info(&quot;Add a new rdb mapping config: {} to canal adapter&quot;, file.getName());</span>
+                }
+<span class="nc" id="L75">            } catch (Exception e) {</span>
+<span class="nc" id="L76">                logger.error(e.getMessage(), e);</span>
+<span class="nc" id="L77">            }</span>
+<span class="nc" id="L78">        }</span>
+
+        @Override
+        public void onFileChange(File file) {
+<span class="nc" id="L82">            super.onFileChange(file);</span>
+
+            try {
+<span class="nc bnc" id="L85" title="All 2 branches missed.">                if (rdbAdapter.getRdbMapping().containsKey(file.getName())) {</span>
+                    // 加载配置文件
+<span class="nc" id="L87">                    String configContent = MappingConfigsLoader</span>
+<span class="nc" id="L88">                        .loadConfig(adapterName + File.separator + file.getName());</span>
+<span class="nc bnc" id="L89" title="All 2 branches missed.">                    if (configContent == null) {</span>
+<span class="nc" id="L90">                        onFileDelete(file);</span>
+<span class="nc" id="L91">                        return;</span>
+                    }
+<span class="nc" id="L93">                    MappingConfig config = YamlUtils</span>
+<span class="nc" id="L94">                        .ymlToObj(null, configContent, MappingConfig.class, null, envProperties);</span>
+<span class="nc bnc" id="L95" title="All 2 branches missed.">                    if (config == null) {</span>
+<span class="nc" id="L96">                        return;</span>
+                    }
+<span class="nc" id="L98">                    config.validate();</span>
+<span class="nc" id="L99">                    rdbAdapter.updateConfig(file.getName(), config);</span>
+<span class="nc" id="L100">                    logger.info(&quot;Change a rdb mapping config: {} of canal adapter&quot;, file.getName());</span>
+                }
+<span class="nc" id="L102">            } catch (Exception e) {</span>
+<span class="nc" id="L103">                logger.error(e.getMessage(), e);</span>
+<span class="nc" id="L104">            }</span>
+<span class="nc" id="L105">        }</span>
+
+        @Override
+        public void onFileDelete(File file) {
+<span class="nc" id="L109">            super.onFileDelete(file);</span>
+
+            try {
+<span class="nc bnc" id="L112" title="All 2 branches missed.">                if (rdbAdapter.getRdbMapping().containsKey(file.getName())) {</span>
+<span class="nc" id="L113">                    rdbAdapter.deleteConfig(file.getName());</span>
+
+<span class="nc" id="L115">                    logger.info(&quot;Delete a rdb mapping config: {} of canal adapter&quot;, file.getName());</span>
+                }
+<span class="nc" id="L117">            } catch (Exception e) {</span>
+<span class="nc" id="L118">                logger.error(e.getMessage(), e);</span>
+<span class="nc" id="L119">            }</span>
+<span class="nc" id="L120">        }</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.3.201901230119</span></div></body></html>

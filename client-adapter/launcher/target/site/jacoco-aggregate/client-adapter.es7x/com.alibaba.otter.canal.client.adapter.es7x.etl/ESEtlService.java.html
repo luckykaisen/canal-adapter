@@ -1,0 +1,203 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>ESEtlService.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">canal client adapter launcher module for otter 1.1.8</a> &gt; <a href="../index.html" class="el_bundle">client-adapter.es7x</a> &gt; <a href="index.source.html" class="el_package">com.alibaba.otter.canal.client.adapter.es7x.etl</a> &gt; <span class="el_source">ESEtlService.java</span></div><h1>ESEtlService.java</h1><pre class="source lang-java linenums">package com.alibaba.otter.canal.client.adapter.es7x.etl;
+
+import java.sql.SQLException;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
+
+import javax.sql.DataSource;
+
+import org.apache.commons.lang.StringUtils;
+import org.elasticsearch.action.search.SearchResponse;
+import org.elasticsearch.index.query.QueryBuilders;
+import org.elasticsearch.search.SearchHit;
+
+import com.alibaba.otter.canal.client.adapter.es.core.config.ESSyncConfig;
+import com.alibaba.otter.canal.client.adapter.es.core.config.ESSyncConfig.ESMapping;
+import com.alibaba.otter.canal.client.adapter.es.core.config.SchemaItem.FieldItem;
+import com.alibaba.otter.canal.client.adapter.es.core.support.ESBulkRequest;
+import com.alibaba.otter.canal.client.adapter.es.core.support.ESBulkRequest.ESBulkResponse;
+import com.alibaba.otter.canal.client.adapter.es.core.support.ESBulkRequest.ESIndexRequest;
+import com.alibaba.otter.canal.client.adapter.es.core.support.ESBulkRequest.ESUpdateRequest;
+import com.alibaba.otter.canal.client.adapter.es.core.support.ESTemplate;
+import com.alibaba.otter.canal.client.adapter.es7x.support.ES7xTemplate;
+import com.alibaba.otter.canal.client.adapter.es7x.support.ESConnection;
+import com.alibaba.otter.canal.client.adapter.es7x.support.ESConnection.ESSearchRequest;
+import com.alibaba.otter.canal.client.adapter.support.AbstractEtlService;
+import com.alibaba.otter.canal.client.adapter.support.AdapterConfig;
+import com.alibaba.otter.canal.client.adapter.support.EtlResult;
+import com.alibaba.otter.canal.client.adapter.support.Util;
+
+/**
+ * ES ETL Service
+ *
+ * @author rewerma 2018-11-01
+ * @version 1.0.0
+ */
+public class ESEtlService extends AbstractEtlService {
+
+    private ESConnection esConnection;
+    private ESTemplate   esTemplate;
+    private ESSyncConfig config;
+
+    public ESEtlService(ESConnection esConnection, ESSyncConfig config){
+<span class="nc" id="L46">        super(&quot;ES&quot;, config);</span>
+<span class="nc" id="L47">        this.esConnection = esConnection;</span>
+<span class="nc" id="L48">        this.esTemplate = new ES7xTemplate(esConnection);</span>
+<span class="nc" id="L49">        this.config = config;</span>
+<span class="nc" id="L50">    }</span>
+
+    public EtlResult importData(List&lt;String&gt; params) {
+<span class="nc" id="L53">        ESMapping mapping = config.getEsMapping();</span>
+<span class="nc" id="L54">        logger.info(&quot;start etl to import data to index: {}&quot;, mapping.getIndex());</span>
+<span class="nc" id="L55">        String sql = mapping.getSql();</span>
+<span class="nc" id="L56">        return importData(sql, params);</span>
+    }
+
+    protected boolean executeSqlImport(DataSource ds, String sql, List&lt;Object&gt; values,
+                                       AdapterConfig.AdapterMapping adapterMapping, AtomicLong impCount,
+                                       List&lt;String&gt; errMsg) {
+        try {
+<span class="nc" id="L63">            ESMapping mapping = (ESMapping) adapterMapping;</span>
+<span class="nc" id="L64">            Util.sqlRS(ds, sql, values, rs -&gt; {</span>
+<span class="nc" id="L65">                int count = 0;</span>
+                try {
+<span class="nc" id="L67">                    ESBulkRequest esBulkRequest = this.esConnection.new ES7xBulkRequest();</span>
+
+<span class="nc" id="L69">                    long batchBegin = System.currentTimeMillis();</span>
+<span class="nc bnc" id="L70" title="All 2 branches missed.">                    while (rs.next()) {</span>
+<span class="nc" id="L71">                        Map&lt;String, Object&gt; esFieldData = new LinkedHashMap&lt;&gt;();</span>
+<span class="nc" id="L72">                        Object idVal = null;</span>
+<span class="nc bnc" id="L73" title="All 2 branches missed.">                        for (FieldItem fieldItem : mapping.getSchemaItem().getSelectFields().values()) {</span>
+
+<span class="nc" id="L75">                            String fieldName = fieldItem.getFieldName();</span>
+<span class="nc bnc" id="L76" title="All 2 branches missed.">                            if (mapping.getSkips().contains(fieldName)) {</span>
+<span class="nc" id="L77">                                continue;</span>
+                            }
+
+                            // 如果是主键字段则不插入
+<span class="nc bnc" id="L81" title="All 2 branches missed.">                            if (fieldItem.getFieldName().equals(mapping.getId())) {</span>
+<span class="nc" id="L82">                                idVal = esTemplate.getValFromRS(mapping, rs, fieldName, fieldName);</span>
+                            } else {
+<span class="nc" id="L84">                                Object val = esTemplate.getValFromRS(mapping, rs, fieldName, fieldName);</span>
+<span class="nc" id="L85">                                esFieldData.put(Util.cleanColumn(fieldName), val);</span>
+                            }
+
+<span class="nc" id="L88">                        }</span>
+
+<span class="nc bnc" id="L90" title="All 2 branches missed.">                        if (!mapping.getRelations().isEmpty()) {</span>
+<span class="nc" id="L91">                            mapping.getRelations().forEach((relationField, relationMapping) -&gt; {</span>
+<span class="nc" id="L92">                                Map&lt;String, Object&gt; relations = new HashMap&lt;&gt;();</span>
+<span class="nc" id="L93">                                relations.put(&quot;name&quot;, relationMapping.getName());</span>
+<span class="nc bnc" id="L94" title="All 2 branches missed.">                                if (StringUtils.isNotEmpty(relationMapping.getParent())) {</span>
+<span class="nc" id="L95">                                    FieldItem parentFieldItem = mapping.getSchemaItem()</span>
+<span class="nc" id="L96">                                        .getSelectFields()</span>
+<span class="nc" id="L97">                                        .get(relationMapping.getParent());</span>
+                                    Object parentVal;
+                                    try {
+<span class="nc" id="L100">                                        parentVal = esTemplate.getValFromRS(mapping,</span>
+                                            rs,
+<span class="nc" id="L102">                                            parentFieldItem.getFieldName(),</span>
+<span class="nc" id="L103">                                            parentFieldItem.getFieldName());</span>
+<span class="nc" id="L104">                                    } catch (SQLException e) {</span>
+<span class="nc" id="L105">                                        throw new RuntimeException(e);</span>
+<span class="nc" id="L106">                                    }</span>
+<span class="nc bnc" id="L107" title="All 2 branches missed.">                                    if (parentVal != null) {</span>
+<span class="nc" id="L108">                                        relations.put(&quot;parent&quot;, parentVal.toString());</span>
+<span class="nc" id="L109">                                        esFieldData.put(&quot;$parent_routing&quot;, parentVal.toString());</span>
+
+                                    }
+                                }
+<span class="nc" id="L113">                                esFieldData.put(Util.cleanColumn(relationField), relations);</span>
+<span class="nc" id="L114">                            });</span>
+                        }
+
+<span class="nc bnc" id="L117" title="All 2 branches missed.">                        if (idVal != null) {</span>
+<span class="nc" id="L118">                            String parentVal = (String) esFieldData.remove(&quot;$parent_routing&quot;);</span>
+<span class="nc bnc" id="L119" title="All 2 branches missed.">                            if (mapping.isUpsert()) {</span>
+<span class="nc" id="L120">                                ESUpdateRequest esUpdateRequest = this.esConnection.new ES7xUpdateRequest(</span>
+<span class="nc" id="L121">                                    mapping.getIndex(),</span>
+<span class="nc" id="L122">                                    idVal.toString()).setDoc(esFieldData).setDocAsUpsert(true);</span>
+
+<span class="nc bnc" id="L124" title="All 2 branches missed.">                                if (StringUtils.isNotEmpty(parentVal)) {</span>
+<span class="nc" id="L125">                                    esUpdateRequest.setRouting(parentVal);</span>
+                                }
+
+<span class="nc" id="L128">                                esBulkRequest.add(esUpdateRequest);</span>
+<span class="nc" id="L129">                            } else {</span>
+<span class="nc" id="L130">                                ESIndexRequest esIndexRequest = this.esConnection.new ES7xIndexRequest(</span>
+<span class="nc" id="L131">                                    mapping.getIndex(),</span>
+<span class="nc" id="L132">                                    idVal.toString()).setSource(esFieldData);</span>
+<span class="nc bnc" id="L133" title="All 2 branches missed.">                                if (StringUtils.isNotEmpty(parentVal)) {</span>
+<span class="nc" id="L134">                                    esIndexRequest.setRouting(parentVal);</span>
+                                }
+<span class="nc" id="L136">                                esBulkRequest.add(esIndexRequest);</span>
+                            }
+<span class="nc" id="L138">                        } else {</span>
+<span class="nc" id="L139">                            idVal = esFieldData.get(mapping.getPk());</span>
+<span class="nc" id="L140">                            ESSearchRequest esSearchRequest = this.esConnection.new ESSearchRequest(mapping.getIndex())</span>
+<span class="nc" id="L141">                                .setQuery(QueryBuilders.termQuery(mapping.getPk(), idVal))</span>
+<span class="nc" id="L142">                                .size(10000);</span>
+<span class="nc" id="L143">                            SearchResponse response = esSearchRequest.getResponse();</span>
+<span class="nc bnc" id="L144" title="All 2 branches missed.">                            for (SearchHit hit : response.getHits()) {</span>
+<span class="nc" id="L145">                                ESUpdateRequest esUpdateRequest = this.esConnection.new ES7xUpdateRequest(</span>
+<span class="nc" id="L146">                                    mapping.getIndex(),</span>
+<span class="nc" id="L147">                                    hit.getId()).setDoc(esFieldData);</span>
+<span class="nc" id="L148">                                esBulkRequest.add(esUpdateRequest);</span>
+<span class="nc" id="L149">                            }</span>
+                        }
+
+<span class="nc bnc" id="L152" title="All 2 branches missed.">                        if (esBulkRequest.numberOfActions() % mapping.getCommitBatch() == 0</span>
+<span class="nc bnc" id="L153" title="All 2 branches missed.">                            &amp;&amp; esBulkRequest.numberOfActions() &gt; 0) {</span>
+<span class="nc" id="L154">                            long esBatchBegin = System.currentTimeMillis();</span>
+<span class="nc" id="L155">                            ESBulkResponse rp = esBulkRequest.bulk();</span>
+<span class="nc bnc" id="L156" title="All 2 branches missed.">                            if (rp.hasFailures()) {</span>
+<span class="nc" id="L157">                                rp.processFailBulkResponse(&quot;全量数据 etl 异常 &quot;);</span>
+                            }
+
+<span class="nc bnc" id="L160" title="All 2 branches missed.">                            if (logger.isTraceEnabled()) {</span>
+<span class="nc" id="L161">                                logger.trace(&quot;全量数据批量导入批次耗时: {}, es执行时间: {}, 批次大小: {}, index; {}&quot;,</span>
+<span class="nc" id="L162">                                    (System.currentTimeMillis() - batchBegin),</span>
+<span class="nc" id="L163">                                    (System.currentTimeMillis() - esBatchBegin),</span>
+<span class="nc" id="L164">                                    esBulkRequest.numberOfActions(),</span>
+<span class="nc" id="L165">                                    mapping.getIndex());</span>
+                            }
+<span class="nc" id="L167">                            batchBegin = System.currentTimeMillis();</span>
+<span class="nc" id="L168">                            esBulkRequest.resetBulk();</span>
+                        }
+<span class="nc" id="L170">                        count++;</span>
+<span class="nc" id="L171">                        impCount.incrementAndGet();</span>
+<span class="nc" id="L172">                    }</span>
+
+<span class="nc bnc" id="L174" title="All 2 branches missed.">                    if (esBulkRequest.numberOfActions() &gt; 0) {</span>
+<span class="nc" id="L175">                        long esBatchBegin = System.currentTimeMillis();</span>
+<span class="nc" id="L176">                        ESBulkResponse rp = esBulkRequest.bulk();</span>
+<span class="nc bnc" id="L177" title="All 2 branches missed.">                        if (rp.hasFailures()) {</span>
+<span class="nc" id="L178">                            rp.processFailBulkResponse(&quot;全量数据 etl 异常 &quot;);</span>
+                        }
+<span class="nc bnc" id="L180" title="All 2 branches missed.">                        if (logger.isTraceEnabled()) {</span>
+<span class="nc" id="L181">                            logger.trace(&quot;全量数据批量导入最后批次耗时: {}, es执行时间: {}, 批次大小: {}, index; {}&quot;,</span>
+<span class="nc" id="L182">                                (System.currentTimeMillis() - batchBegin),</span>
+<span class="nc" id="L183">                                (System.currentTimeMillis() - esBatchBegin),</span>
+<span class="nc" id="L184">                                esBulkRequest.numberOfActions(),</span>
+<span class="nc" id="L185">                                mapping.getIndex());</span>
+                        }
+                    }
+<span class="nc" id="L188">                } catch (Exception e) {</span>
+<span class="nc" id="L189">                    logger.error(e.getMessage(), e);</span>
+<span class="nc" id="L190">                    errMsg.add(mapping.getIndex() + &quot; etl failed! ==&gt;&quot; + e.getMessage());</span>
+<span class="nc" id="L191">                    throw new RuntimeException(e);</span>
+<span class="nc" id="L192">                }</span>
+<span class="nc" id="L193">                return count;</span>
+            });
+
+<span class="nc" id="L196">            return true;</span>
+<span class="nc" id="L197">        } catch (Exception e) {</span>
+<span class="nc" id="L198">            logger.error(e.getMessage(), e);</span>
+<span class="nc" id="L199">            return false;</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.3.201901230119</span></div></body></html>

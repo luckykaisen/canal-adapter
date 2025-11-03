@@ -1,0 +1,5 @@
+com.alibaba.otter.canal.client.adapter.clickhouse
+com.alibaba.otter.canal.client.adapter.clickhouse.config
+com.alibaba.otter.canal.client.adapter.clickhouse.monitor
+com.alibaba.otter.canal.client.adapter.clickhouse.service
+com.alibaba.otter.canal.client.adapter.clickhouse.support

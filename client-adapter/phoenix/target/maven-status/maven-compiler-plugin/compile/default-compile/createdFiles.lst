@@ -1,0 +1,16 @@
+com/alibaba/otter/canal/client/adapter/phoenix/monitor/PhoenixConfigMonitor.class
+com/alibaba/otter/canal/client/adapter/phoenix/config/MappingConfig$DbMapping.class
+com/alibaba/otter/canal/client/adapter/phoenix/support/PhoenixSupportUtil.class
+com/alibaba/otter/canal/client/adapter/phoenix/service/PhoenixEtlService.class
+com/alibaba/otter/canal/client/adapter/phoenix/support/SingleDml.class
+com/alibaba/otter/canal/client/adapter/phoenix/monitor/PhoenixConfigMonitor$1.class
+com/alibaba/otter/canal/client/adapter/phoenix/support/TypeUtil.class
+com/alibaba/otter/canal/client/adapter/phoenix/config/MappingConfig.class
+com/alibaba/otter/canal/client/adapter/phoenix/service/PhoenixSyncService$SyncItem.class
+com/alibaba/otter/canal/client/adapter/phoenix/monitor/PhoenixConfigMonitor$FileListener.class
+com/alibaba/otter/canal/client/adapter/phoenix/config/ConfigLoader.class
+com/alibaba/otter/canal/client/adapter/phoenix/support/BatchExecutor.class
+com/alibaba/otter/canal/client/adapter/phoenix/PhoenixAdapter.class
+com/alibaba/otter/canal/client/adapter/phoenix/config/ConfigurationManager.class
+com/alibaba/otter/canal/client/adapter/phoenix/service/PhoenixSyncService.class
+com/alibaba/otter/canal/client/adapter/phoenix/support/SyncUtil.class

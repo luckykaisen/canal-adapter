@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>RdbMirrorDbSyncService.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">canal client adapter launcher module for otter 1.1.8</a> &gt; <a href="../index.html" class="el_bundle">client-adapter.rdb</a> &gt; <a href="index.source.html" class="el_package">com.alibaba.otter.canal.client.adapter.rdb.service</a> &gt; <span class="el_source">RdbMirrorDbSyncService.java</span></div><h1>RdbMirrorDbSyncService.java</h1><pre class="source lang-java linenums">package com.alibaba.otter.canal.client.adapter.rdb.service;
+
+import java.sql.Connection;
+import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.apache.commons.lang.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.alibaba.druid.pool.DruidDataSource;
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONWriter.Feature;
+import com.alibaba.otter.canal.client.adapter.rdb.config.MappingConfig;
+import com.alibaba.otter.canal.client.adapter.rdb.config.MirrorDbConfig;
+import com.alibaba.otter.canal.client.adapter.rdb.support.SingleDml;
+import com.alibaba.otter.canal.client.adapter.rdb.support.SyncUtil;
+import com.alibaba.otter.canal.client.adapter.support.Dml;
+
+/**
+ * RDB镜像库同步操作业务
+ *
+ * @author rewerma 2018-12-12 下午011:23
+ * @version 1.0.0
+ */
+public class RdbMirrorDbSyncService {
+
+<span class="nc" id="L31">    private static final Logger         logger = LoggerFactory.getLogger(RdbMirrorDbSyncService.class);</span>
+
+    private Map&lt;String, MirrorDbConfig&gt; mirrorDbConfigCache;                                           // 镜像库配置
+    private DruidDataSource             dataSource;
+    private RdbSyncService              rdbSyncService;                                                // rdbSyncService代理
+
+    public RdbMirrorDbSyncService(Map&lt;String, MirrorDbConfig&gt; mirrorDbConfigCache, DruidDataSource dataSource,
+                                  Integer threads, Map&lt;String, Map&lt;String, Integer&gt;&gt; columnsTypeCache,
+<span class="nc" id="L39">                                  boolean skipDupException){</span>
+<span class="nc" id="L40">        this.mirrorDbConfigCache = mirrorDbConfigCache;</span>
+<span class="nc" id="L41">        this.dataSource = dataSource;</span>
+<span class="nc" id="L42">        this.rdbSyncService = new RdbSyncService(dataSource, threads, columnsTypeCache, skipDupException);</span>
+<span class="nc" id="L43">    }</span>
+
+    /**
+     * 批量同步方法
+     *
+     * @param dmls 批量 DML，包含DDL
+     */
+    public void sync(List&lt;Dml&gt; dmls) {
+<span class="nc" id="L51">        List&lt;Dml&gt; dmlList = new ArrayList&lt;&gt;();</span>
+<span class="nc bnc" id="L52" title="All 2 branches missed.">        for (Dml dml : dmls) {</span>
+<span class="nc" id="L53">            String destination = StringUtils.trimToEmpty(dml.getDestination());</span>
+<span class="nc" id="L54">            String database = dml.getDatabase();</span>
+<span class="nc" id="L55">            MirrorDbConfig mirrorDbConfig = mirrorDbConfigCache.get(destination + &quot;.&quot; + database);</span>
+<span class="nc bnc" id="L56" title="All 2 branches missed.">            if (mirrorDbConfig == null) {</span>
+<span class="nc" id="L57">                continue;</span>
+            }
+<span class="nc bnc" id="L59" title="All 2 branches missed.">            if (mirrorDbConfig.getMappingConfig() == null) {</span>
+<span class="nc" id="L60">                continue;</span>
+            }
+<span class="nc bnc" id="L62" title="All 4 branches missed.">            if (dml.getGroupId() != null &amp;&amp; StringUtils.isNotEmpty(mirrorDbConfig.getMappingConfig().getGroupId())) {</span>
+<span class="nc bnc" id="L63" title="All 2 branches missed.">                if (!mirrorDbConfig.getMappingConfig().getGroupId().equals(dml.getGroupId())) {</span>
+<span class="nc" id="L64">                    continue; // 如果groupId不匹配则过滤</span>
+                }
+            }
+
+<span class="nc bnc" id="L68" title="All 6 branches missed.">            if (dml.getIsDdl() != null &amp;&amp; dml.getIsDdl() &amp;&amp; StringUtils.isNotEmpty(dml.getSql())) {</span>
+                // 确保执行DDL前DML已执行完
+<span class="nc" id="L70">                syncDml(dmlList);</span>
+<span class="nc" id="L71">                dmlList.clear();</span>
+
+                // DDL
+<span class="nc bnc" id="L74" title="All 2 branches missed.">                if (logger.isDebugEnabled()) {</span>
+<span class="nc" id="L75">                    logger.debug(&quot;DDL: {}&quot;, JSON.toJSONString(dml, Feature.WriteNulls));</span>
+                }
+<span class="nc" id="L77">                executeDdl(mirrorDbConfig, dml);</span>
+<span class="nc" id="L78">                rdbSyncService.getColumnsTypeCache().remove(destination + &quot;.&quot; + database + &quot;.&quot; + dml.getTable());</span>
+<span class="nc" id="L79">                mirrorDbConfig.getTableConfig().remove(dml.getTable()); // 删除对应库表配置</span>
+            } else {
+                // DML
+<span class="nc" id="L82">                initMappingConfig(dml.getTable(), mirrorDbConfig.getMappingConfig(), mirrorDbConfig, dml);</span>
+<span class="nc" id="L83">                dmlList.add(dml);</span>
+            }
+<span class="nc" id="L85">        }</span>
+<span class="nc" id="L86">        syncDml(dmlList);</span>
+<span class="nc" id="L87">    }</span>
+
+    /**
+     * 批量同步Dml
+     *
+     * @param dmlList Dml列表，不包含DDL
+     */
+    private void syncDml(List&lt;Dml&gt; dmlList) {
+//        if (dmlList == null || dmlList.isEmpty()) {
+//            return;
+//        }
+//        rdbSyncService.sync(dmlList, dml -&gt; {
+//            MirrorDbConfig mirrorDbConfig = mirrorDbConfigCache.get(dml.getDestination() + &quot;.&quot; + dml.getDatabase());
+//            if (mirrorDbConfig == null) {
+//                return false;
+//            }
+//            String table = dml.getTable();
+//            MappingConfig config = mirrorDbConfig.getTableConfig().get(table);
+//
+//            if (config == null) {
+//                return false;
+//            }
+//            rdbSyncService.appendDmlPartition(config, dml);
+//            return true;
+//        });
+<span class="nc" id="L112">    }</span>
+
+    /**
+     * 初始化表配置
+     *
+     * @param key 配置key: destination.database.table
+     * @param baseConfigMap db sync config
+     * @param dml DML
+     */
+    private void initMappingConfig(String key, MappingConfig baseConfigMap, MirrorDbConfig mirrorDbConfig, Dml dml) {
+<span class="nc" id="L122">        MappingConfig mappingConfig = mirrorDbConfig.getTableConfig().get(key);</span>
+<span class="nc bnc" id="L123" title="All 2 branches missed.">        if (mappingConfig == null) {</span>
+            // 构造表配置
+<span class="nc" id="L125">            mappingConfig = new MappingConfig();</span>
+<span class="nc" id="L126">            mappingConfig.setDataSourceKey(baseConfigMap.getDataSourceKey());</span>
+<span class="nc" id="L127">            mappingConfig.setDestination(baseConfigMap.getDestination());</span>
+<span class="nc" id="L128">            mappingConfig.setGroupId(baseConfigMap.getGroupId());</span>
+<span class="nc" id="L129">            mappingConfig.setOuterAdapterKey(baseConfigMap.getOuterAdapterKey());</span>
+<span class="nc" id="L130">            mappingConfig.setConcurrent(baseConfigMap.getConcurrent());</span>
+<span class="nc" id="L131">            MappingConfig.DbMapping dbMapping = new MappingConfig.DbMapping();</span>
+<span class="nc" id="L132">            mappingConfig.setDbMapping(dbMapping);</span>
+<span class="nc" id="L133">            dbMapping.setDatabase(dml.getDatabase());</span>
+<span class="nc" id="L134">            dbMapping.setTable(dml.getTable());</span>
+<span class="nc" id="L135">            dbMapping.setTargetDb(dml.getDatabase());</span>
+<span class="nc" id="L136">            dbMapping.setTargetTable(dml.getTable());</span>
+<span class="nc" id="L137">            dbMapping.setMapAll(true);</span>
+<span class="nc" id="L138">            List&lt;String&gt; pkNames = dml.getPkNames();</span>
+<span class="nc" id="L139">            Map&lt;String, String&gt; pkMapping = new LinkedHashMap&lt;&gt;();</span>
+<span class="nc" id="L140">            pkNames.forEach(pkName -&gt; pkMapping.put(pkName, pkName));</span>
+<span class="nc" id="L141">            dbMapping.setTargetPk(pkMapping);</span>
+
+<span class="nc" id="L143">            mirrorDbConfig.getTableConfig().put(key, mappingConfig);</span>
+        }
+<span class="nc" id="L145">    }</span>
+
+    /**
+     * DDL 操作
+     *
+     * @param ddl DDL
+     */
+    private void executeDdl(MirrorDbConfig mirrorDbConfig, Dml ddl) {
+<span class="nc" id="L153">        try (Connection conn = dataSource.getConnection(); Statement statement = conn.createStatement()) {</span>
+            // 替换反引号
+<span class="nc" id="L155">            String sql = ddl.getSql();</span>
+<span class="nc" id="L156">            String backtick = SyncUtil.getBacktickByDbType(dataSource.getDbType());</span>
+<span class="nc bnc" id="L157" title="All 2 branches missed.">            if (!&quot;`&quot;.equals(backtick)) {</span>
+<span class="nc" id="L158">                sql = sql.replaceAll(&quot;`&quot;, backtick);</span>
+            }
+<span class="nc" id="L160">            statement.execute(sql);</span>
+            // 移除对应配置
+<span class="nc" id="L162">            mirrorDbConfig.getTableConfig().remove(ddl.getTable());</span>
+<span class="nc bnc" id="L163" title="All 2 branches missed.">            if (logger.isTraceEnabled()) {</span>
+<span class="nc" id="L164">                logger.trace(&quot;Execute DDL sql: {} for database: {}&quot;, ddl.getSql(), ddl.getDatabase());</span>
+            }
+<span class="nc" id="L166">        } catch (Exception e) {</span>
+<span class="nc" id="L167">            throw new RuntimeException(e);</span>
+<span class="nc" id="L168">        }</span>
+<span class="nc" id="L169">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.3.201901230119</span></div></body></html>

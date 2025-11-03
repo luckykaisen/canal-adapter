@@ -1,0 +1,288 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>HbaseEtlService.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">canal client adapter launcher module for otter 1.1.8</a> &gt; <a href="../index.html" class="el_bundle">client-adapter.hbase</a> &gt; <a href="index.source.html" class="el_package">com.alibaba.otter.canal.client.adapter.hbase.service</a> &gt; <span class="el_source">HbaseEtlService.java</span></div><h1>HbaseEtlService.java</h1><pre class="source lang-java linenums">package com.alibaba.otter.canal.client.adapter.hbase.service;
+
+import java.sql.Timestamp;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
+
+import javax.sql.DataSource;
+
+import org.apache.hadoop.hbase.util.Bytes;
+
+import com.alibaba.otter.canal.client.adapter.hbase.config.MappingConfig;
+import com.alibaba.otter.canal.client.adapter.hbase.support.HRow;
+import com.alibaba.otter.canal.client.adapter.hbase.support.HbaseTemplate;
+import com.alibaba.otter.canal.client.adapter.hbase.support.PhType;
+import com.alibaba.otter.canal.client.adapter.hbase.support.PhTypeUtil;
+import com.alibaba.otter.canal.client.adapter.hbase.support.Type;
+import com.alibaba.otter.canal.client.adapter.hbase.support.TypeUtil;
+import com.alibaba.otter.canal.client.adapter.support.AbstractEtlService;
+import com.alibaba.otter.canal.client.adapter.support.AdapterConfig;
+import com.alibaba.otter.canal.client.adapter.support.EtlResult;
+import com.alibaba.otter.canal.client.adapter.support.JdbcTypeUtil;
+import com.alibaba.otter.canal.client.adapter.support.Util;
+import com.google.common.base.Joiner;
+
+/**
+ * HBase ETL 操作业务类
+ *
+ * @author rewerma @ 2018-10-20
+ * @version 1.0.0
+ */
+public class HbaseEtlService extends AbstractEtlService {
+
+    private HbaseTemplate hbaseTemplate;
+    private MappingConfig config;
+
+    public HbaseEtlService(HbaseTemplate hbaseTemplate, MappingConfig config){
+<span class="nc" id="L40">        super(&quot;HBase&quot;, config);</span>
+<span class="nc" id="L41">        this.hbaseTemplate = hbaseTemplate;</span>
+<span class="nc" id="L42">        this.config = config;</span>
+<span class="nc" id="L43">    }</span>
+
+    /**
+     * 建表
+     */
+    private void createTable() {
+        try {
+            // 判断hbase表是否存在，不存在则建表
+<span class="nc" id="L51">            MappingConfig.HbaseMapping hbaseMapping = config.getHbaseMapping();</span>
+<span class="nc bnc" id="L52" title="All 2 branches missed.">            if (!hbaseTemplate.tableExists(hbaseMapping.getHbaseTable())) {</span>
+<span class="nc" id="L53">                hbaseTemplate.createTable(hbaseMapping.getHbaseTable(), hbaseMapping.getFamily());</span>
+            }
+<span class="nc" id="L55">        } catch (Exception e) {</span>
+<span class="nc" id="L56">            logger.error(e.getMessage(), e);</span>
+<span class="nc" id="L57">            throw new RuntimeException(e);</span>
+<span class="nc" id="L58">        }</span>
+<span class="nc" id="L59">    }</span>
+
+    /**
+     * 导入数据
+     *
+     * @param params 筛选条件
+     * @return 导入结果
+     */
+    public EtlResult importData(List&lt;String&gt; params) {
+<span class="nc" id="L68">        EtlResult etlResult = new EtlResult();</span>
+<span class="nc" id="L69">        List&lt;String&gt; errMsg = new ArrayList&lt;&gt;();</span>
+        try {
+<span class="nc" id="L71">            MappingConfig.HbaseMapping hbaseMapping = config.getHbaseMapping();</span>
+
+<span class="nc bnc" id="L73" title="All 6 branches missed.">            if (params != null &amp;&amp; params.size() == 1 &amp;&amp; &quot;rebuild&quot;.equalsIgnoreCase(params.get(0))) {</span>
+<span class="nc" id="L74">                logger.info(hbaseMapping.getHbaseTable() + &quot; rebuild is starting!&quot;);</span>
+                // 如果表存在则删除
+<span class="nc bnc" id="L76" title="All 2 branches missed.">                if (hbaseTemplate.tableExists(hbaseMapping.getHbaseTable())) {</span>
+<span class="nc" id="L77">                    hbaseTemplate.disableTable(hbaseMapping.getHbaseTable());</span>
+<span class="nc" id="L78">                    hbaseTemplate.deleteTable(hbaseMapping.getHbaseTable());</span>
+                }
+<span class="nc" id="L80">                params = null;</span>
+            } else {
+<span class="nc" id="L82">                logger.info(hbaseMapping.getHbaseTable() + &quot; etl is starting!&quot;);</span>
+            }
+<span class="nc" id="L84">            createTable();</span>
+
+            // 拼接sql
+<span class="nc" id="L87">            String sql = &quot;SELECT * FROM `&quot; + config.getHbaseMapping().getDatabase() + &quot;`.`&quot; + hbaseMapping.getTable()</span>
+                         + &quot;`&quot;;
+
+<span class="nc" id="L90">            return super.importData(sql, params);</span>
+<span class="nc" id="L91">        } catch (Exception e) {</span>
+<span class="nc" id="L92">            logger.error(e.getMessage(), e);</span>
+<span class="nc" id="L93">            errMsg.add(&quot;HBase etl error ==&gt;&quot; + e.getMessage());</span>
+        }
+<span class="nc" id="L95">        etlResult.setErrorMessage(Joiner.on(&quot;\n&quot;).join(errMsg));</span>
+<span class="nc" id="L96">        return etlResult;</span>
+    }
+
+    /**
+     * 执行导入
+     */
+    protected boolean executeSqlImport(DataSource ds, String sql, List&lt;Object&gt; values,
+                                       AdapterConfig.AdapterMapping mapping, AtomicLong impCount, List&lt;String&gt; errMsg) {
+<span class="nc" id="L104">        MappingConfig.HbaseMapping hbaseMapping = (MappingConfig.HbaseMapping) mapping;</span>
+        try {
+<span class="nc" id="L106">            Util.sqlRS(ds, sql, values, rs -&gt; {</span>
+<span class="nc" id="L107">                int i = 1;</span>
+
+                try {
+<span class="nc" id="L110">                    boolean complete = false;</span>
+<span class="nc" id="L111">                    List&lt;HRow&gt; rows = new ArrayList&lt;&gt;();</span>
+<span class="nc" id="L112">                    String[] rowKeyColumns = null;</span>
+<span class="nc bnc" id="L113" title="All 2 branches missed.">                    if (hbaseMapping.getRowKey() != null) {</span>
+<span class="nc" id="L114">                        rowKeyColumns = hbaseMapping.getRowKey().trim().split(&quot;,&quot;);</span>
+                    }
+<span class="nc bnc" id="L116" title="All 2 branches missed.">                    while (rs.next()) {</span>
+<span class="nc" id="L117">                        int cc = rs.getMetaData().getColumnCount();</span>
+<span class="nc" id="L118">                        int[] jdbcTypes = new int[cc];</span>
+<span class="nc" id="L119">                        Class&lt;?&gt;[] classes = new Class[cc];</span>
+<span class="nc bnc" id="L120" title="All 2 branches missed.">                        for (int j = 1; j &lt;= cc; j++) {</span>
+<span class="nc" id="L121">                            int jdbcType = rs.getMetaData().getColumnType(j);</span>
+<span class="nc" id="L122">                            jdbcTypes[j - 1] = jdbcType;</span>
+<span class="nc" id="L123">                            classes[j - 1] = JdbcTypeUtil.jdbcType2javaType(jdbcType);</span>
+                        }
+<span class="nc" id="L125">                        HRow row = new HRow();</span>
+
+<span class="nc bnc" id="L127" title="All 2 branches missed.">                        if (rowKeyColumns != null) {</span>
+                            // 取rowKey字段拼接
+<span class="nc" id="L129">                StringBuilder rowKeyVale = new StringBuilder();</span>
+<span class="nc bnc" id="L130" title="All 2 branches missed.">                for (String rowKeyColumnName : rowKeyColumns) {</span>
+<span class="nc" id="L131">                    Object obj = rs.getObject(rowKeyColumnName);</span>
+<span class="nc bnc" id="L132" title="All 2 branches missed.">                    if (obj != null) {</span>
+<span class="nc" id="L133">                        rowKeyVale.append(obj.toString());</span>
+                    }
+<span class="nc" id="L135">                    rowKeyVale.append(&quot;|&quot;);</span>
+                }
+<span class="nc" id="L137">                int len = rowKeyVale.length();</span>
+<span class="nc bnc" id="L138" title="All 2 branches missed.">                if (len &gt; 0) {</span>
+<span class="nc" id="L139">                    rowKeyVale.delete(len - 1, len);</span>
+                }
+<span class="nc" id="L141">                row.setRowKey(Bytes.toBytes(rowKeyVale.toString()));</span>
+            }
+
+<span class="nc bnc" id="L144" title="All 2 branches missed.">            for (int j = 1; j &lt;= cc; j++) {</span>
+<span class="nc" id="L145">                String columnName = rs.getMetaData().getColumnName(j);</span>
+
+<span class="nc" id="L147">                Object val = JdbcTypeUtil.getRSData(rs, columnName, jdbcTypes[j - 1]);</span>
+<span class="nc bnc" id="L148" title="All 2 branches missed.">                if (val == null) {</span>
+<span class="nc" id="L149">                    continue;</span>
+                }
+
+<span class="nc" id="L152">                MappingConfig.ColumnItem columnItem = hbaseMapping.getColumnItems().get(columnName);</span>
+                // 没有配置映射
+<span class="nc bnc" id="L154" title="All 2 branches missed.">                if (columnItem == null) {</span>
+<span class="nc" id="L155">                    String family = hbaseMapping.getFamily();</span>
+<span class="nc" id="L156">                    String qualifile = columnName;</span>
+<span class="nc bnc" id="L157" title="All 2 branches missed.">                    if (hbaseMapping.isUppercaseQualifier()) {</span>
+<span class="nc" id="L158">                        qualifile = qualifile.toUpperCase();</span>
+                    }
+<span class="nc bnc" id="L160" title="All 2 branches missed.">                    if (MappingConfig.Mode.STRING == hbaseMapping.getMode()) {</span>
+<span class="nc bnc" id="L161" title="All 4 branches missed.">                        if (hbaseMapping.getRowKey() == null &amp;&amp; j == 1) {</span>
+<span class="nc" id="L162">                            row.setRowKey(Bytes.toBytes(val.toString()));</span>
+                        } else {
+<span class="nc" id="L164">                            row.addCell(family, qualifile, Bytes.toBytes(val.toString()));</span>
+                        }
+<span class="nc bnc" id="L166" title="All 2 branches missed.">                    } else if (MappingConfig.Mode.NATIVE == hbaseMapping.getMode()) {</span>
+<span class="nc" id="L167">                        Type type = Type.getType(classes[j - 1]);</span>
+<span class="nc bnc" id="L168" title="All 4 branches missed.">                        if (hbaseMapping.getRowKey() == null &amp;&amp; j == 1) {</span>
+<span class="nc" id="L169">                            row.setRowKey(TypeUtil.toBytes(val, type));</span>
+                        } else {
+<span class="nc" id="L171">                            row.addCell(family, qualifile, TypeUtil.toBytes(val, type));</span>
+                        }
+<span class="nc bnc" id="L173" title="All 2 branches missed.">                    } else if (MappingConfig.Mode.PHOENIX == hbaseMapping.getMode()) {</span>
+<span class="nc" id="L174">                        PhType phType = PhType.getType(classes[j - 1]);</span>
+<span class="nc bnc" id="L175" title="All 4 branches missed.">                        if (hbaseMapping.getRowKey() == null &amp;&amp; j == 1) {</span>
+<span class="nc" id="L176">                            row.setRowKey(PhTypeUtil.toBytes(val, phType));</span>
+                        } else {
+<span class="nc" id="L178">                            row.addCell(family, qualifile, PhTypeUtil.toBytes(val, phType));</span>
+                        }
+                    }
+<span class="nc" id="L181">                } else {</span>
+                    // 如果不需要类型转换
+<span class="nc bnc" id="L183" title="All 4 branches missed.">                    if (columnItem.getType() == null || &quot;&quot;.equals(columnItem.getType())) {</span>
+<span class="nc bnc" id="L184" title="All 2 branches missed.">                        if (val instanceof java.sql.Date) {</span>
+<span class="nc" id="L185">                            SimpleDateFormat dateFmt = new SimpleDateFormat(&quot;yyyy-MM-dd&quot;);</span>
+<span class="nc" id="L186">                            val = dateFmt.format((Date) val);</span>
+<span class="nc bnc" id="L187" title="All 2 branches missed.">                        } else if (val instanceof Timestamp) {</span>
+<span class="nc" id="L188">                            SimpleDateFormat datetimeFmt = new SimpleDateFormat(&quot;yyyy-MM-dd HH:mm:ss&quot;);</span>
+<span class="nc" id="L189">                            val = datetimeFmt.format((Date) val);</span>
+                        }
+
+<span class="nc" id="L192">                        byte[] valBytes = Bytes.toBytes(val.toString());</span>
+<span class="nc bnc" id="L193" title="All 2 branches missed.">                        if (columnItem.isRowKey()) {</span>
+<span class="nc bnc" id="L194" title="All 2 branches missed.">                            if (columnItem.getRowKeyLen() != null) {</span>
+<span class="nc" id="L195">                                valBytes = Bytes.toBytes(limitLenNum(columnItem.getRowKeyLen(), val));</span>
+<span class="nc" id="L196">                                row.setRowKey(valBytes);</span>
+                            } else {
+<span class="nc" id="L198">                                row.setRowKey(valBytes);</span>
+                            }
+                        } else {
+<span class="nc" id="L201">                            row.addCell(columnItem.getFamily(), columnItem.getQualifier(), valBytes);</span>
+                        }
+<span class="nc" id="L203">                    } else {</span>
+<span class="nc bnc" id="L204" title="All 2 branches missed.">                        if (MappingConfig.Mode.STRING == hbaseMapping.getMode()) {</span>
+<span class="nc" id="L205">                            byte[] valBytes = Bytes.toBytes(val.toString());</span>
+<span class="nc bnc" id="L206" title="All 2 branches missed.">                            if (columnItem.isRowKey()) {</span>
+<span class="nc bnc" id="L207" title="All 2 branches missed.">                                if (columnItem.getRowKeyLen() != null) {</span>
+<span class="nc" id="L208">                                    valBytes = Bytes.toBytes(limitLenNum(columnItem.getRowKeyLen(), val));</span>
+                                }
+<span class="nc" id="L210">                                row.setRowKey(valBytes);</span>
+                            } else {
+<span class="nc" id="L212">                                row.addCell(columnItem.getFamily(), columnItem.getQualifier(), valBytes);</span>
+                            }
+<span class="nc bnc" id="L214" title="All 2 branches missed.">                        } else if (MappingConfig.Mode.NATIVE == hbaseMapping.getMode()) {</span>
+<span class="nc" id="L215">                            Type type = Type.getType(columnItem.getType());</span>
+<span class="nc bnc" id="L216" title="All 2 branches missed.">                            if (columnItem.isRowKey()) {</span>
+<span class="nc bnc" id="L217" title="All 2 branches missed.">                                if (columnItem.getRowKeyLen() != null) {</span>
+<span class="nc" id="L218">                                    String v = limitLenNum(columnItem.getRowKeyLen(), val);</span>
+<span class="nc" id="L219">                                    row.setRowKey(Bytes.toBytes(v));</span>
+<span class="nc" id="L220">                                } else {</span>
+<span class="nc" id="L221">                                    row.setRowKey(TypeUtil.toBytes(val, type));</span>
+                                }
+                            } else {
+<span class="nc" id="L224">                                row.addCell(columnItem.getFamily(),</span>
+<span class="nc" id="L225">                                    columnItem.getQualifier(),</span>
+<span class="nc" id="L226">                                    TypeUtil.toBytes(val, type));</span>
+                            }
+<span class="nc bnc" id="L228" title="All 2 branches missed.">                        } else if (MappingConfig.Mode.PHOENIX == hbaseMapping.getMode()) {</span>
+<span class="nc" id="L229">                            PhType phType = PhType.getType(columnItem.getType());</span>
+<span class="nc bnc" id="L230" title="All 2 branches missed.">                            if (columnItem.isRowKey()) {</span>
+<span class="nc" id="L231">                                row.setRowKey(PhTypeUtil.toBytes(val, phType));</span>
+                            } else {
+<span class="nc" id="L233">                                row.addCell(columnItem.getFamily(),</span>
+<span class="nc" id="L234">                                    columnItem.getQualifier(),</span>
+<span class="nc" id="L235">                                    PhTypeUtil.toBytes(val, phType));</span>
+                            }
+                        }
+                    }
+                }
+            }
+
+<span class="nc bnc" id="L242" title="All 2 branches missed.">            if (row.getRowKey() == null) throw new RuntimeException(&quot;RowKey 值为空&quot;);</span>
+
+<span class="nc" id="L244">            rows.add(row);</span>
+<span class="nc" id="L245">            complete = false;</span>
+<span class="nc bnc" id="L246" title="All 4 branches missed.">            if (i % hbaseMapping.getCommitBatch() == 0 &amp;&amp; !rows.isEmpty()) {</span>
+<span class="nc" id="L247">                hbaseTemplate.puts(hbaseMapping.getHbaseTable(), rows);</span>
+<span class="nc" id="L248">                rows.clear();</span>
+<span class="nc" id="L249">                complete = true;</span>
+            }
+<span class="nc" id="L251">            i++;</span>
+<span class="nc" id="L252">            impCount.incrementAndGet();</span>
+<span class="nc bnc" id="L253" title="All 2 branches missed.">            if (logger.isDebugEnabled()) {</span>
+<span class="nc" id="L254">                logger.debug(&quot;successful import count:&quot; + impCount.get());</span>
+            }
+<span class="nc" id="L256">        }</span>
+
+<span class="nc bnc" id="L258" title="All 4 branches missed.">        if (!complete &amp;&amp; !rows.isEmpty()) {</span>
+<span class="nc" id="L259">            hbaseTemplate.puts(hbaseMapping.getHbaseTable(), rows);</span>
+        }
+
+<span class="nc" id="L262">    } catch (Exception e) {</span>
+<span class="nc" id="L263">        logger.error(hbaseMapping.getHbaseTable() + &quot; etl failed! ==&gt;&quot; + e.getMessage(), e);</span>
+<span class="nc" id="L264">        errMsg.add(hbaseMapping.getHbaseTable() + &quot; etl failed! ==&gt;&quot; + e.getMessage());</span>
+        // throw new RuntimeException(e);
+<span class="nc" id="L266">    }</span>
+<span class="nc" id="L267">    return i;</span>
+}           );
+<span class="nc" id="L269">            return true;</span>
+<span class="nc" id="L270">        } catch (Exception e) {</span>
+<span class="nc" id="L271">            logger.error(e.getMessage(), e);</span>
+<span class="nc" id="L272">            return false;</span>
+        }
+    }
+
+    private static String limitLenNum(int len, Object val) {
+<span class="nc bnc" id="L277" title="All 2 branches missed.">        if (val == null) {</span>
+<span class="nc" id="L278">            return null;</span>
+        }
+<span class="nc bnc" id="L280" title="All 2 branches missed.">        if (val instanceof Number) {</span>
+<span class="nc" id="L281">            return String.format(&quot;%0&quot; + len + &quot;d&quot;, (Number) ((Number) val).longValue());</span>
+<span class="nc bnc" id="L282" title="All 2 branches missed.">        } else if (val instanceof String) {</span>
+<span class="nc" id="L283">            return String.format(&quot;%0&quot; + len + &quot;d&quot;, Long.parseLong((String) val));</span>
+        }
+<span class="nc" id="L285">        return null;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.3.201901230119</span></div></body></html>

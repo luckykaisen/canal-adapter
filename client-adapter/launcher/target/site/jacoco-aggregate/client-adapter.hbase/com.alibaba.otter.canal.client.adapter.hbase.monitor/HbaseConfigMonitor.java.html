@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>HbaseConfigMonitor.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">canal client adapter launcher module for otter 1.1.8</a> &gt; <a href="../index.html" class="el_bundle">client-adapter.hbase</a> &gt; <a href="index.source.html" class="el_package">com.alibaba.otter.canal.client.adapter.hbase.monitor</a> &gt; <span class="el_source">HbaseConfigMonitor.java</span></div><h1>HbaseConfigMonitor.java</h1><pre class="source lang-java linenums">package com.alibaba.otter.canal.client.adapter.hbase.monitor;
+
+import com.alibaba.otter.canal.client.adapter.hbase.HbaseAdapter;
+import com.alibaba.otter.canal.client.adapter.hbase.config.MappingConfig;
+import com.alibaba.otter.canal.client.adapter.support.MappingConfigsLoader;
+import com.alibaba.otter.canal.client.adapter.support.Util;
+import com.alibaba.otter.canal.client.adapter.support.YamlUtils;
+import java.io.File;
+import java.util.Properties;
+import org.apache.commons.io.filefilter.FileFilterUtils;
+import org.apache.commons.io.monitor.FileAlterationListenerAdaptor;
+import org.apache.commons.io.monitor.FileAlterationMonitor;
+import org.apache.commons.io.monitor.FileAlterationObserver;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+<span class="nc" id="L17">public class HbaseConfigMonitor {</span>
+
+<span class="nc" id="L19">    private static final Logger   logger      = LoggerFactory.getLogger(HbaseConfigMonitor.class);</span>
+
+    private static final String   adapterName = &quot;hbase&quot;;
+
+    private HbaseAdapter          hbaseAdapter;
+
+    private Properties            envProperties;
+
+    private FileAlterationMonitor fileMonitor;
+
+    public void init(HbaseAdapter hbaseAdapter, Properties envProperties) {
+<span class="nc" id="L30">        this.hbaseAdapter = hbaseAdapter;</span>
+<span class="nc" id="L31">        this.envProperties = envProperties;</span>
+<span class="nc" id="L32">        File confDir = Util.getConfDirPath(adapterName);</span>
+        try {
+<span class="nc" id="L34">            FileAlterationObserver observer = new FileAlterationObserver(confDir,</span>
+<span class="nc" id="L35">                    FileFilterUtils.and(FileFilterUtils.fileFileFilter(), FileFilterUtils.suffixFileFilter(&quot;yml&quot;)));</span>
+<span class="nc" id="L36">            FileListener listener = new FileListener();</span>
+<span class="nc" id="L37">            observer.addListener(listener);</span>
+<span class="nc" id="L38">            fileMonitor = new FileAlterationMonitor(3000, observer);</span>
+<span class="nc" id="L39">            fileMonitor.start();</span>
+
+<span class="nc" id="L41">        } catch (Exception e) {</span>
+<span class="nc" id="L42">            logger.error(e.getMessage(), e);</span>
+<span class="nc" id="L43">        }</span>
+<span class="nc" id="L44">    }</span>
+
+    public void destroy() {
+        try {
+<span class="nc" id="L48">            fileMonitor.stop();</span>
+<span class="nc" id="L49">        } catch (Exception e) {</span>
+<span class="nc" id="L50">            logger.error(e.getMessage(), e);</span>
+<span class="nc" id="L51">        }</span>
+<span class="nc" id="L52">    }</span>
+
+<span class="nc" id="L54">    private class FileListener extends FileAlterationListenerAdaptor {</span>
+
+        @Override
+        public void onFileCreate(File file) {
+<span class="nc" id="L58">            super.onFileCreate(file);</span>
+            try {
+                // 加载新增的配置文件
+<span class="nc" id="L61">                String configContent = MappingConfigsLoader.loadConfig(adapterName + File.separator + file.getName());</span>
+<span class="nc" id="L62">                MappingConfig config = YamlUtils.ymlToObj(null, configContent, MappingConfig.class, null, envProperties);</span>
+<span class="nc bnc" id="L63" title="All 2 branches missed.">                if (config == null) {</span>
+<span class="nc" id="L64">                    return;</span>
+                }
+<span class="nc" id="L66">                config.validate();</span>
+<span class="nc" id="L67">                boolean result = hbaseAdapter.addConfig(file.getName(), config);</span>
+<span class="nc bnc" id="L68" title="All 2 branches missed.">                if (result) {</span>
+<span class="nc" id="L69">                    logger.info(&quot;Add a new hbase mapping config: {} to canal adapter&quot;,</span>
+<span class="nc" id="L70">                            file.getName());</span>
+                }
+<span class="nc" id="L72">            } catch (Exception e) {</span>
+<span class="nc" id="L73">                logger.error(e.getMessage(), e);</span>
+<span class="nc" id="L74">            }</span>
+<span class="nc" id="L75">        }</span>
+
+        @Override
+        public void onFileChange(File file) {
+<span class="nc" id="L79">            super.onFileChange(file);</span>
+
+            try {
+<span class="nc bnc" id="L82" title="All 2 branches missed.">                if (hbaseAdapter.getHbaseMapping().containsKey(file.getName())) {</span>
+                    // 加载配置文件
+<span class="nc" id="L84">                    String configContent = MappingConfigsLoader</span>
+<span class="nc" id="L85">                        .loadConfig(adapterName + File.separator + file.getName());</span>
+<span class="nc bnc" id="L86" title="All 2 branches missed.">                    if (configContent == null) {</span>
+<span class="nc" id="L87">                        onFileDelete(file);</span>
+<span class="nc" id="L88">                        return;</span>
+                    }
+<span class="nc" id="L90">                    MappingConfig config = YamlUtils.ymlToObj(null, configContent, MappingConfig.class, null, envProperties);</span>
+<span class="nc bnc" id="L91" title="All 2 branches missed.">                    if (config == null) {</span>
+<span class="nc" id="L92">                        return;</span>
+                    }
+<span class="nc" id="L94">                    config.validate();</span>
+<span class="nc" id="L95">                    hbaseAdapter.updateConfig(file.getName(), config);</span>
+                }
+<span class="nc" id="L97">            } catch (Exception e) {</span>
+<span class="nc" id="L98">                logger.error(e.getMessage(), e);</span>
+<span class="nc" id="L99">            }</span>
+<span class="nc" id="L100">        }</span>
+
+        @Override
+        public void onFileDelete(File file) {
+<span class="nc" id="L104">            super.onFileDelete(file);</span>
+
+            try {
+<span class="nc bnc" id="L107" title="All 2 branches missed.">                if (hbaseAdapter.getHbaseMapping().containsKey(file.getName())) {</span>
+<span class="nc" id="L108">                    hbaseAdapter.deleteConfig(file.getName());</span>
+<span class="nc" id="L109">                    logger.info(&quot;Delete a hbase mapping config: {} of canal adapter&quot;, file.getName());</span>
+                }
+<span class="nc" id="L111">            } catch (Exception e) {</span>
+<span class="nc" id="L112">                logger.error(e.getMessage(), e);</span>
+<span class="nc" id="L113">            }</span>
+<span class="nc" id="L114">        }</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.3.201901230119</span></div></body></html>

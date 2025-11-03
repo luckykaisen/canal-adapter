@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>ClickHouseMirrorDbBatchSyncService.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">canal client adapter launcher module for otter 1.1.8</a> &gt; <a href="../index.html" class="el_bundle">client-adapter.clickhouse</a> &gt; <a href="index.source.html" class="el_package">com.alibaba.otter.canal.client.adapter.clickhouse.service</a> &gt; <span class="el_source">ClickHouseMirrorDbBatchSyncService.java</span></div><h1>ClickHouseMirrorDbBatchSyncService.java</h1><pre class="source lang-java linenums">package com.alibaba.otter.canal.client.adapter.clickhouse.service;
+
+import java.sql.Connection;
+import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.apache.commons.lang.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.alibaba.druid.pool.DruidDataSource;
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONWriter.Feature;
+import com.alibaba.otter.canal.client.adapter.clickhouse.config.MappingConfig;
+import com.alibaba.otter.canal.client.adapter.clickhouse.config.MirrorDbConfig;
+import com.alibaba.otter.canal.client.adapter.clickhouse.support.SyncUtil;
+import com.alibaba.otter.canal.client.adapter.support.Dml;
+
+/**
+ * CLICKHOUSE镜像库同步操作业务
+ *
+ * @author: Xander
+ * @date: Created in 2023/11/10 22:23
+ * @email: zhrunxin33@gmail.com
+ * @version 1.1.8
+ */
+public class ClickHouseMirrorDbBatchSyncService {
+
+<span class="nc" id="L32">    private static final Logger         logger = LoggerFactory.getLogger(ClickHouseMirrorDbBatchSyncService.class);</span>
+
+    // 镜像库配置
+    private Map&lt;String, MirrorDbConfig&gt; mirrorDbConfigCache;
+    private DruidDataSource             dataSource;
+    // clickhouseSyncService代理
+    private ClickHouseBatchSyncService  clickHouseBatchSyncService;
+
+    public ClickHouseMirrorDbBatchSyncService(Map&lt;String, MirrorDbConfig&gt; mirrorDbConfigCache,
+                                              DruidDataSource dataSource, Integer threads, Integer batchSize,
+                                              Long scheduleTime, Map&lt;String, Map&lt;String, Integer&gt;&gt; columnsTypeCache,
+<span class="nc" id="L43">                                              boolean skipDupException){</span>
+<span class="nc" id="L44">        this.mirrorDbConfigCache = mirrorDbConfigCache;</span>
+<span class="nc" id="L45">        this.dataSource = dataSource;</span>
+<span class="nc" id="L46">        this.clickHouseBatchSyncService = new ClickHouseBatchSyncService(dataSource,</span>
+            threads,
+            batchSize,
+            scheduleTime,
+            columnsTypeCache,
+            skipDupException);
+<span class="nc" id="L52">    }</span>
+
+    /**
+     * 批量同步方法
+     *
+     * @param dmls 批量 DML，包含DDL
+     */
+    public void sync(List&lt;Dml&gt; dmls) {
+<span class="nc" id="L60">        List&lt;Dml&gt; dmlList = new ArrayList&lt;&gt;();</span>
+<span class="nc bnc" id="L61" title="All 2 branches missed.">        for (Dml dml : dmls) {</span>
+<span class="nc" id="L62">            String destination = StringUtils.trimToEmpty(dml.getDestination());</span>
+<span class="nc" id="L63">            String database = dml.getDatabase();</span>
+<span class="nc" id="L64">            MirrorDbConfig mirrorDbConfig = mirrorDbConfigCache.get(destination + &quot;.&quot; + database);</span>
+<span class="nc bnc" id="L65" title="All 2 branches missed.">            if (mirrorDbConfig == null) {</span>
+<span class="nc" id="L66">                continue;</span>
+            }
+<span class="nc bnc" id="L68" title="All 2 branches missed.">            if (mirrorDbConfig.getMappingConfig() == null) {</span>
+<span class="nc" id="L69">                continue;</span>
+            }
+<span class="nc bnc" id="L71" title="All 4 branches missed.">            if (dml.getGroupId() != null &amp;&amp; StringUtils.isNotEmpty(mirrorDbConfig.getMappingConfig().getGroupId())) {</span>
+<span class="nc bnc" id="L72" title="All 2 branches missed.">                if (!mirrorDbConfig.getMappingConfig().getGroupId().equals(dml.getGroupId())) {</span>
+<span class="nc" id="L73">                    continue; // 如果groupId不匹配则过滤</span>
+                }
+            }
+
+<span class="nc bnc" id="L77" title="All 6 branches missed.">            if (dml.getIsDdl() != null &amp;&amp; dml.getIsDdl() &amp;&amp; StringUtils.isNotEmpty(dml.getSql())) {</span>
+                // 确保执行DDL前DML已执行完
+<span class="nc" id="L79">                syncDml(dmlList);</span>
+<span class="nc" id="L80">                dmlList.clear();</span>
+
+                // DDL
+<span class="nc bnc" id="L83" title="All 2 branches missed.">                if (logger.isDebugEnabled()) {</span>
+<span class="nc" id="L84">                    logger.debug(&quot;DDL: {}&quot;, JSON.toJSONString(dml, Feature.WriteNulls));</span>
+                }
+<span class="nc" id="L86">                executeDdl(mirrorDbConfig, dml);</span>
+<span class="nc" id="L87">                clickHouseBatchSyncService.getColumnsTypeCache()</span>
+<span class="nc" id="L88">                    .remove(destination + &quot;.&quot; + database + &quot;.&quot; + dml.getTable());</span>
+<span class="nc" id="L89">                mirrorDbConfig.getTableConfig().remove(dml.getTable()); // 删除对应库表配置</span>
+            } else {
+                // DML
+<span class="nc" id="L92">                initMappingConfig(dml.getTable(), mirrorDbConfig.getMappingConfig(), mirrorDbConfig, dml);</span>
+<span class="nc" id="L93">                dmlList.add(dml);</span>
+            }
+<span class="nc" id="L95">        }</span>
+<span class="nc" id="L96">        syncDml(dmlList);</span>
+<span class="nc" id="L97">    }</span>
+
+    /**
+     * 批量同步Dml
+     *
+     * @param dmlList Dml列表，不包含DDL
+     */
+    private void syncDml(List&lt;Dml&gt; dmlList) {
+<span class="nc bnc" id="L105" title="All 4 branches missed.">        if (dmlList == null || dmlList.isEmpty()) {</span>
+<span class="nc" id="L106">            return;</span>
+        }
+<span class="nc" id="L108">        clickHouseBatchSyncService.sync(dmlList, dml -&gt; {</span>
+<span class="nc" id="L109">            MirrorDbConfig mirrorDbConfig = mirrorDbConfigCache.get(dml.getDestination() + &quot;.&quot; + dml.getDatabase());</span>
+<span class="nc bnc" id="L110" title="All 2 branches missed.">            if (mirrorDbConfig == null) {</span>
+<span class="nc" id="L111">                return false;</span>
+            }
+<span class="nc" id="L113">            String table = dml.getTable();</span>
+<span class="nc" id="L114">            MappingConfig config = mirrorDbConfig.getTableConfig().get(table);</span>
+
+<span class="nc bnc" id="L116" title="All 2 branches missed.">            if (config == null) {</span>
+<span class="nc" id="L117">                return false;</span>
+            }
+<span class="nc" id="L119">            clickHouseBatchSyncService.appendDmlBufferPartition(config, dml);</span>
+<span class="nc" id="L120">            return true;</span>
+        });
+<span class="nc" id="L122">    }</span>
+
+    /**
+     * 初始化表配置
+     *
+     * @param key 配置key: destination.database.table
+     * @param baseConfigMap db sync config
+     * @param dml DML
+     */
+    private void initMappingConfig(String key, MappingConfig baseConfigMap, MirrorDbConfig mirrorDbConfig, Dml dml) {
+<span class="nc" id="L132">        MappingConfig mappingConfig = mirrorDbConfig.getTableConfig().get(key);</span>
+<span class="nc bnc" id="L133" title="All 2 branches missed.">        if (mappingConfig == null) {</span>
+            // 构造表配置
+<span class="nc" id="L135">            mappingConfig = new MappingConfig();</span>
+<span class="nc" id="L136">            mappingConfig.setDataSourceKey(baseConfigMap.getDataSourceKey());</span>
+<span class="nc" id="L137">            mappingConfig.setDestination(baseConfigMap.getDestination());</span>
+<span class="nc" id="L138">            mappingConfig.setGroupId(baseConfigMap.getGroupId());</span>
+<span class="nc" id="L139">            mappingConfig.setOuterAdapterKey(baseConfigMap.getOuterAdapterKey());</span>
+<span class="nc" id="L140">            mappingConfig.setConcurrent(baseConfigMap.getConcurrent());</span>
+<span class="nc" id="L141">            MappingConfig.DbMapping dbMapping = new MappingConfig.DbMapping();</span>
+<span class="nc" id="L142">            mappingConfig.setDbMapping(dbMapping);</span>
+<span class="nc" id="L143">            dbMapping.setDatabase(dml.getDatabase());</span>
+<span class="nc" id="L144">            dbMapping.setTable(dml.getTable());</span>
+<span class="nc" id="L145">            dbMapping.setTargetDb(dml.getDatabase());</span>
+<span class="nc" id="L146">            dbMapping.setTargetTable(dml.getTable());</span>
+<span class="nc" id="L147">            dbMapping.setMapAll(true);</span>
+<span class="nc" id="L148">            List&lt;String&gt; pkNames = dml.getPkNames();</span>
+<span class="nc" id="L149">            Map&lt;String, String&gt; pkMapping = new LinkedHashMap&lt;&gt;();</span>
+<span class="nc" id="L150">            pkNames.forEach(pkName -&gt; pkMapping.put(pkName, pkName));</span>
+<span class="nc" id="L151">            dbMapping.setTargetPk(pkMapping);</span>
+
+<span class="nc" id="L153">            mirrorDbConfig.getTableConfig().put(key, mappingConfig);</span>
+        }
+<span class="nc" id="L155">    }</span>
+
+    /**
+     * DDL 操作
+     *
+     * @param ddl DDL
+     */
+    private void executeDdl(MirrorDbConfig mirrorDbConfig, Dml ddl) {
+<span class="nc" id="L163">        try (Connection conn = dataSource.getConnection(); Statement statement = conn.createStatement()) {</span>
+            // 替换反引号
+<span class="nc" id="L165">            String sql = ddl.getSql();</span>
+<span class="nc" id="L166">            String backtick = SyncUtil.getBacktickByDbType(dataSource.getDbType());</span>
+<span class="nc bnc" id="L167" title="All 2 branches missed.">            if (!&quot;`&quot;.equals(backtick)) {</span>
+<span class="nc" id="L168">                sql = sql.replaceAll(&quot;`&quot;, backtick);</span>
+            }
+<span class="nc" id="L170">            statement.execute(sql);</span>
+            // 移除对应配置
+<span class="nc" id="L172">            mirrorDbConfig.getTableConfig().remove(ddl.getTable());</span>
+<span class="nc bnc" id="L173" title="All 2 branches missed.">            if (logger.isTraceEnabled()) {</span>
+<span class="nc" id="L174">                logger.trace(&quot;Execute DDL sql: {} for database: {}&quot;, ddl.getSql(), ddl.getDatabase());</span>
+            }
+<span class="nc" id="L176">        } catch (Exception e) {</span>
+<span class="nc" id="L177">            throw new RuntimeException(e);</span>
+<span class="nc" id="L178">        }</span>
+<span class="nc" id="L179">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.3.201901230119</span></div></body></html>
